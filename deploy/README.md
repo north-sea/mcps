@@ -65,12 +65,19 @@ git push origin hermes-db-v0.1.1
 
 ## NAS self-hosted runner
 
-NAS runner 需要注册到本仓库，并带有以下 labels：
+NAS runner 需要注册到本仓库。由于本仓库是 public repo，不应启用默认 runner labels，避免普通 `runs-on: self-hosted` 作业误落到 NAS。
 
-```
-self-hosted
-nas
-mcps-deploy
+注册时使用：
+
+```bash
+./config.sh --unattended \
+  --url https://github.com/NorthSeacoder/mcps \
+  --token <registration-token> \
+  --name nas-mcps-deploy \
+  --no-default-labels \
+  --labels nas,mcps-deploy \
+  --work _work \
+  --replace
 ```
 
 runner 运行用户需要具备：
