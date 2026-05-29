@@ -30,19 +30,61 @@ uv sync
 uv run hermes-db-mcp
 ```
 
-## 部署（docker compose + SSE 模式）
+## 部署（docker compose + Streamable HTTP 模式）
 
 ```bash
 cp .env.example .env
-# 编辑 .env: TRANSPORT=sse, PG_DSN, REDIS_URL, EMBEDDING_*
+# 编辑 .env: TRANSPORT=streamable-http, API_TOKEN, PG_DSN, REDIS_URL, EMBEDDING_*
 docker compose up -d
 ```
 
 Server 在 proxy 网络内监听 `8080` 端口，不映射宿主机端口。
 
-## Hermes Agent 配置
+## MCP Client 配置
 
-在 Hermes agent 的 MCP 配置中添加：
+推荐使用 Streamable HTTP `/mcp` endpoint。服务端使用标准 HTTP `Authorization: Bearer <token>` 认证；不同客户端只是配置字段名不同。
+
+### Codex
+
+Codex 可以直接写静态 header：
+
+```toml
+[mcp_servers.hermes-db]
+type = "streamable-http"
+url = "http://hermes-db-mcp:8080/mcp"
+http_headers = { Authorization = "Bearer <token>" }
+```
+
+也可以用环境变量承载 token：
+
+```toml
+[mcp_servers.hermes-db]
+type = "streamable-http"
+url = "http://hermes-db-mcp:8080/mcp"
+bearer_token_env_var = "HERMES_DB_MCP_TOKEN"
+```
+
+### Claude Code
+
+Claude Code 使用 `headers` 字段：
+
+```json
+{
+  "mcpServers": {
+    "hermes-db": {
+      "type": "streamable-http",
+      "url": "http://hermes-db-mcp:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    }
+  }
+}
+```
+
+### SSE legacy
+
+如果仍需要旧 SSE transport，需要显式设置 `TRANSPORT=sse`，并使用 `/sse` endpoint：
 
 ```json
 {
@@ -54,6 +96,8 @@ Server 在 proxy 网络内监听 `8080` 端口，不映射宿主机端口。
 }
 ```
 
+除非现有客户端只能使用 SSE，否则新配置应优先使用 Streamable HTTP。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -64,4 +108,5 @@ Server 在 proxy 网络内监听 `8080` 端口，不映射宿主机端口。
 | `EMBEDDING_API_KEY` | - | API Key |
 | `EMBEDDING_MODEL` | text-embedding-v3 | 模型名 |
 | `EMBEDDING_DIMENSION` | 1024 | 向量维度 |
-| `TRANSPORT` | stdio | stdio 或 sse |
+| `TRANSPORT` | stdio | stdio、sse 或 streamable-http |
+| `API_TOKEN` | - | HTTP/SSE bearer token；为空时不启用认证，生产环境必须配置 |
