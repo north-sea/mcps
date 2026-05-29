@@ -1,0 +1,23 @@
+{
+  "services": {
+    "hermes-db": {
+      "image": "ghcr.io/northseacoder/hermes-db-mcp",
+      "context": "packages/hermes-db",
+      "dockerfile": "packages/hermes-db/Dockerfile",
+      "platforms": ["linux/amd64"],
+      "test": {
+        "workingDirectory": "packages/hermes-db",
+        "command": "python -m pip install uv\nuv run pytest tests -q"
+      },
+      "deploy": {
+        "composeProjectDir": "/vol1/1000/Docker/hermes-db-mcp",
+        "composeFile": "docker-compose.yml",
+        "composeService": "hermes-db-mcp",
+        "containerName": "hermes-db-mcp",
+        "health": {
+          "type": "container-running"
+        }
+      }
+    }
+  }
+}

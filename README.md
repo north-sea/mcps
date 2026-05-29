@@ -79,7 +79,16 @@ uv run hermes-db-mcp       # 启动服务
 
 ## 部署
 
-所有 MCP 沿用同一套发布流程：`build -> tag -> push -> NAS pull -> run`。详见 [`deploy/README.md`](deploy/README.md)。
+所有 MCP 沿用同一套服务级版本发布流程：`<service>-vX.Y.Z tag -> GitHub Actions build -> GHCR push -> NAS runner deploy`。详见 [`deploy/README.md`](deploy/README.md)。
+
+例如发布 `hermes-db`：
+
+```bash
+git tag hermes-db-v0.1.1
+git push origin hermes-db-v0.1.1
+```
+
+NAS 运行态只使用具体版本镜像，例如 `ghcr.io/northseacoder/hermes-db-mcp:v0.1.1`。
 
 NAS 上的私有配置（镜像仓地址、密钥、内网域名）通过 `.gitignore` 隔离的本地覆盖文件提供，例如：
 

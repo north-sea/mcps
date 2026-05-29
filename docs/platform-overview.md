@@ -50,10 +50,19 @@ Python 服务不参与 turbo 构建，通过 `uv` 独立管理依赖和运行。
 所有服务共享同一套发布流程：
 
 ```
-build -> tag -> push -> NAS pull -> run
+<service>-vX.Y.Z tag -> GitHub Actions build -> GHCR push -> NAS runner deploy
 ```
 
 详见 [`deploy/README.md`](../deploy/README.md)。
+
+当前采用服务级版本发布。示例：
+
+```bash
+git tag hermes-db-v0.1.1
+git push origin hermes-db-v0.1.1
+```
+
+NAS 只部署具体版本镜像，例如 `ghcr.io/northseacoder/hermes-db-mcp:v0.1.1`，不使用 `latest` 作为运行态版本。
 
 ---
 

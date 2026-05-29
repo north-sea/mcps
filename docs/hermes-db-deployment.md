@@ -25,7 +25,18 @@ cd packages/hermes-db
 docker build -t ghcr.io/northseacoder/hermes-db-mcp:latest .
 ```
 
-镜像命名约定：`ghcr.io/northseacoder/hermes-db-mcp:<tag>`
+本地构建只用于调试。正式发布使用服务级 Git tag：
+
+```bash
+git tag hermes-db-v0.1.1
+git push origin hermes-db-v0.1.1
+```
+
+GitHub Actions 会构建并推送：
+
+```text
+ghcr.io/northseacoder/hermes-db-mcp:v0.1.1
+```
 
 ---
 
@@ -49,13 +60,10 @@ docker compose up -d           # 使用服务目录内的 docker-compose.yml
 
 ## NAS 部署
 
-NAS 部署使用平台层 compose 描述：
+NAS 部署由 self-hosted runner 执行。runner 根据 `deploy/mcp-services.json` 找到 compose 项目目录，并调用：
 
 ```bash
-# 在 NAS 上
-cd deploy/services
-docker compose -f hermes-db.yml --env-file ../nas.local.env pull
-docker compose -f hermes-db.yml --env-file ../nas.local.env up -d
+scripts/nas-deploy-mcp.sh
 ```
 
 NAS 私有配置（PG_DSN、REDIS_URL、密钥等）通过 `deploy/nas.local.env` 提供，不进入开源仓。
