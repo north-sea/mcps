@@ -4,7 +4,15 @@ import asyncpg
 from pgvector.asyncpg import register_vector
 
 
-VALID_CATEGORIES = {"hook", "scene", "setting", "character", "conflict", "world", "plot"}
+VALID_CATEGORIES = {
+    "hook",
+    "scene",
+    "setting",
+    "character",
+    "conflict",
+    "world",
+    "plot",
+}
 
 
 async def insert_inspiration(
@@ -24,7 +32,9 @@ async def insert_inspiration(
     """
     async with pool.acquire() as conn:
         await register_vector(conn)
-        row = await conn.fetchrow(sql, content, book_id, category, title, chapter_hint, embedding)
+        row = await conn.fetchrow(
+            sql, content, book_id, category, title, chapter_hint, embedding
+        )
     return dict(row)
 
 

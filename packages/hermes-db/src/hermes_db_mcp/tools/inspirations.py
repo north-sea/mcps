@@ -28,7 +28,11 @@ async def create_novel_inspiration(
     if not category:
         return {"error": "missing_required_field", "field": "category"}
     if category not in VALID_CATEGORIES:
-        return {"error": "invalid_category", "field": "category", "allowed": sorted(VALID_CATEGORIES)}
+        return {
+            "error": "invalid_category",
+            "field": "category",
+            "allowed": sorted(VALID_CATEGORIES),
+        }
 
     embed_text = f"{title} {content}" if title else content
     embedding = await generate_embedding(app.http, embed_text)
@@ -71,8 +75,12 @@ async def find_similar_inspirations(
         return {"error": "embedding_unavailable", "message": "无法生成查询向量"}
 
     rows = await inspiration_repo.find_similar(
-        app.pool, embedding=embedding, book_id=book_id, category=category,
-        threshold=threshold, limit=limit,
+        app.pool,
+        embedding=embedding,
+        book_id=book_id,
+        category=category,
+        threshold=threshold,
+        limit=limit,
     )
     for r in rows:
         r["id"] = str(r["id"])
@@ -93,7 +101,11 @@ async def list_inspirations(
     app: AppContext = ctx.request_context.lifespan_context
 
     items, total = await inspiration_repo.list_by_filter(
-        app.pool, book_id=book_id, category=category, limit=limit, offset=offset,
+        app.pool,
+        book_id=book_id,
+        category=category,
+        limit=limit,
+        offset=offset,
     )
     for item in items:
         item["id"] = str(item["id"])
@@ -116,6 +128,9 @@ async def get_inspiration(id: str, ctx: Context) -> dict:
     if not row:
         return {"error": "not_found", "id": id}
 
-    result = {k: str(v) if k in ("id", "created_at", "updated_at") else v for k, v in row.items()}
+    result = {
+        k: str(v) if k in ("id", "created_at", "updated_at") else v
+        for k, v in row.items()
+    }
     await cache_record(app.redis, cache_key, result)
     return result

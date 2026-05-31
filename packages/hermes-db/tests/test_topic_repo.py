@@ -49,6 +49,9 @@ async def test_find_similar_excludes_old_published_topics(monkeypatch):
         limit=3,
     )
 
-    assert "(status != 'published' OR updated_at >= now() - interval '3 months')" in pool.conn.sql
+    assert (
+        "(status != 'published' OR updated_at >= now() - interval '3 months')"
+        in pool.conn.sql
+    )
     assert "account = $4" in pool.conn.sql
     assert pool.conn.params == ([0.1, 0.2], 0.7, 3, "moon")

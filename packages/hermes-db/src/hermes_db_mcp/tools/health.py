@@ -28,7 +28,11 @@ async def health(ctx: Context) -> dict:
     try:
         resp = await app.http.post(
             "/embeddings",
-            json={"model": settings.embedding_model, "input": "ping", "dimensions": settings.embedding_dimension},
+            json={
+                "model": settings.embedding_model,
+                "input": "ping",
+                "dimensions": settings.embedding_dimension,
+            },
             headers={"Authorization": f"Bearer {settings.embedding_api_key}"},
             timeout=3.0,
         )
