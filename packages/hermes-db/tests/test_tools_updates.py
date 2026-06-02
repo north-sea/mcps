@@ -7,7 +7,13 @@ from uuid import uuid4
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 
-from hermes_db_mcp.tools.topics import update_topic, batch_update_topics, list_topics
+from hermes_db_mcp.tools.topics import (
+    update_topic,
+    batch_update_topics,
+    list_topics,
+    create_topic,
+    list_revisit_chain,
+)
 
 
 class FakeAppContext:
@@ -221,6 +227,180 @@ class TestUpdateTopic:
 
         assert result["error"] == "not_found"
 
+    async def test_update_revisit_of_success(self, monkeypatch):
+        """合法 revisit_of 更新成功且不重算 embedding"""
+        topic_id = uuid4()
+        parent_id = uuid4()
+        current_row = {
+            "id": topic_id,
+            "title": "标题",
+            "angle": None,
+            "account": "test",
+            "status": "draft",
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+        }
+        parent_row = {
+            "id": parent_id,
+            "title": "旧母题",
+            "status": "published",
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+        }
+        updated_row = {
+            **current_row,
+            "revisit_of": parent_id,
+            "updated_at": datetime.now(),
+        }
+
+        async def mock_get_by_id(pool, topic_id):
+            if topic_id == parent_id:
+                return parent_row
+            return current_row
+
+        async def mock_update_fields(pool, topic_id, fields, embedding):
+            assert fields["revisit_of"] == parent_id
+            assert fields["mother_theme"] == "拖延-早晨场景"
+            assert embedding is ...
+            return updated_row
+
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.get_by_id", mock_get_by_id
+        )
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.update_topic_fields",
+            mock_update_fields,
+        )
+        monkeypatch.setattr("hermes_db_mcp.tools.topics.cache_record", AsyncMock())
+
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await update_topic(
+            id=str(topic_id),
+            ctx=ctx,
+            revisit_of=str(parent_id),
+            mother_theme="拖延-早晨场景",
+        )
+
+        assert result["embedding_regenerated"] is False
+        assert "revisit_of" in result["updated_fields"]
+        assert "mother_theme" in result["updated_fields"]
+
+    async def test_update_revisit_of_self_rejected(self, monkeypatch):
+        """revisit_of 指向自身返回结构化错误"""
+        topic_id = uuid4()
+
+        async def mock_get_by_id(pool, topic_id):
+            return {"id": topic_id, "title": "标题", "status": "draft"}
+
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.get_by_id", mock_get_by_id
+        )
+
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await update_topic(
+            id=str(topic_id),
+            ctx=ctx,
+            revisit_of=str(topic_id),
+        )
+
+        assert result["error"] == "invalid_revisit_of_self"
+
+    async def test_update_revisit_target_not_found(self, monkeypatch):
+        """revisit_of 目标不存在返回结构化错误"""
+        topic_id = uuid4()
+        parent_id = uuid4()
+
+        async def mock_get_by_id(pool, topic_id):
+            if topic_id == parent_id:
+                return None
+            return {"id": topic_id, "title": "标题", "status": "draft"}
+
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.get_by_id", mock_get_by_id
+        )
+
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await update_topic(
+            id=str(topic_id),
+            ctx=ctx,
+            revisit_of=str(parent_id),
+        )
+
+        assert result["error"] == "revisit_target_not_found"
+
+
+@pytest.mark.asyncio
+class TestCreateTopicRevisit:
+    """测试 create_topic 的 revisit_of 参数"""
+
+    async def test_create_topic_with_revisit_of(self, monkeypatch):
+        parent_id = uuid4()
+        new_id = uuid4()
+        created_at = datetime.now()
+
+        async def mock_get_by_id(pool, topic_id):
+            assert topic_id == parent_id
+            return {"id": parent_id, "title": "旧母题"}
+
+        async def mock_generate_embedding(http, text):
+            return [0.1] * 1024
+
+        async def mock_insert_topic(pool, **kwargs):
+            assert kwargs["revisit_of"] == parent_id
+            assert kwargs["mother_theme"] == "拖延-早晨场景"
+            return {"id": new_id, "status": "draft", "created_at": created_at}
+
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.get_by_id", mock_get_by_id
+        )
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.generate_embedding", mock_generate_embedding
+        )
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.insert_topic", mock_insert_topic
+        )
+        monkeypatch.setattr("hermes_db_mcp.tools.topics.update_recent_set", AsyncMock())
+
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await create_topic(
+            title="新角度标题",
+            account="test",
+            ctx=ctx,
+            revisit_of=str(parent_id),
+            mother_theme="拖延-早晨场景",
+        )
+
+        assert result["id"] == str(new_id)
+        assert result["status"] == "draft"
+
+    async def test_create_topic_revisit_target_not_found(self, monkeypatch):
+        async def mock_get_by_id(pool, topic_id):
+            return None
+
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.get_by_id", mock_get_by_id
+        )
+
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await create_topic(
+            title="新角度标题",
+            account="test",
+            ctx=ctx,
+            revisit_of=str(uuid4()),
+        )
+
+        assert result["error"] == "revisit_target_not_found"
+
 
 @pytest.mark.asyncio
 class TestBatchUpdateTopics:
@@ -400,3 +580,58 @@ class TestListTopicsEnhanced:
 
         assert result["error"] == "invalid_field"
         assert result["field"] == "limit"
+
+
+@pytest.mark.asyncio
+class TestListRevisitChain:
+    """测试 list_revisit_chain 工具"""
+
+    async def test_list_revisit_chain_success(self, monkeypatch):
+        topic_id = uuid4()
+        parent_id = uuid4()
+        created_at = datetime.now()
+
+        async def mock_get_revisit_chain(pool, topic_id, max_depth):
+            return {
+                "items": [
+                    {
+                        "id": topic_id,
+                        "title": "新选题",
+                        "status": "draft",
+                        "created_at": created_at,
+                        "published_url": None,
+                    },
+                    {
+                        "id": parent_id,
+                        "title": "旧母题",
+                        "status": "published",
+                        "created_at": created_at,
+                        "published_url": "https://example.com/a",
+                    },
+                ],
+                "truncated": False,
+            }
+
+        monkeypatch.setattr(
+            "hermes_db_mcp.tools.topics.topic_repo.get_revisit_chain",
+            mock_get_revisit_chain,
+        )
+
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await list_revisit_chain(str(topic_id), ctx, max_depth=20)
+
+        assert result["truncated"] is False
+        assert result["items"][0]["id"] == str(topic_id)
+        assert result["items"][1]["id"] == str(parent_id)
+        assert result["items"][0]["created_at"] == str(created_at)
+
+    async def test_list_revisit_chain_invalid_uuid(self):
+        app = FakeAppContext()
+        ctx = FakeContext(app)
+
+        result = await list_revisit_chain("not-a-uuid", ctx)
+
+        assert result["error"] == "invalid_uuid"
+        assert result["field"] == "topic_id"

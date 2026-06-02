@@ -56,6 +56,15 @@ uv run hermes-db-mcp          # stdio 模式
 docker compose up -d           # 使用服务目录内的 docker-compose.yml
 ```
 
+如本次发布包含 schema 变更，先用同一镜像显式执行 Alembic migration：
+
+```bash
+docker compose run --rm --entrypoint alembic hermes-db-mcp upgrade head
+docker compose up -d hermes-db-mcp
+```
+
+迁移不绑定普通服务 `ENTRYPOINT`。这样迁移失败时旧运行态不会被无意替换，也避免未来多副本同时尝试迁移。
+
 ---
 
 ## NAS 部署
@@ -89,7 +98,9 @@ NAS 私有配置（PG_DSN、REDIS_URL、密钥等）通过 `deploy/nas.local.env
 1. 确认 `deploy/nas.local.env` 已在 NAS 上准备好。
 2. 停止原仓的容器。
 3. 使用平台层 compose 拉取并启动。
-4. 验证服务可用性（调用 `health` 工具）。
-5. 确认无误后归档原仓。
+4. 如版本包含 migration，执行 `docker compose run --rm --entrypoint alembic hermes-db-mcp upgrade head`。
+5. 启动服务后验证服务可用性（调用 `health` 工具）。
+6. 对 `hermes-db-v0.2.0` 及之后版本，确认 `health().schema_revision == "0001_topic_revisit"`，且 `health().capabilities.topic_bucket`、`topic_revisit_of`、`list_revisit_chain` 均为 `true`。
+7. 确认无误后归档原仓。
 
 在切换完成前，原仓的运行态保持可用，两者可并存。

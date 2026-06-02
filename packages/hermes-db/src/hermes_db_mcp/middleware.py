@@ -27,7 +27,10 @@ class BearerAuthMiddleware:
         headers = Headers(scope=scope)
         auth_header = headers.get("authorization", "")
         if self._is_head_probe(scope):
-            await self._send_empty_json_probe_response(send, status=200 if auth_header == f"Bearer {settings.api_token}" else 401)
+            await self._send_empty_json_probe_response(
+                send,
+                status=200 if auth_header == f"Bearer {settings.api_token}" else 401,
+            )
             return
 
         if auth_header == f"Bearer {settings.api_token}":
@@ -44,7 +47,11 @@ class BearerAuthMiddleware:
             await self._call_with_diagnostic_errors(scope, receive, send)
             return
 
-        response = JSONResponse({"error": "unauthorized"}, status_code=401)
+        response = JSONResponse(
+            {"error": "unauthorized"},
+            status_code=401,
+            headers={"WWW-Authenticate": 'Bearer realm="hermes-db"'},
+        )
         await response(scope, receive, send)
 
     def _normalize_mcp_path(self, scope: Scope) -> Scope:
@@ -71,15 +78,21 @@ class BearerAuthMiddleware:
     def _accepts_event_stream(self, headers: Headers) -> bool:
         return "text/event-stream" in headers.get("accept", "")
 
-    async def _send_empty_json_probe_response(self, send: Send, status: int = 200) -> None:
+    async def _send_empty_json_probe_response(
+        self, send: Send, status: int = 200
+    ) -> None:
+        headers = [
+            (b"content-type", b"application/json"),
+            (b"content-length", b"0"),
+        ]
+        if status == 401:
+            headers.append((b"www-authenticate", b'Bearer realm="hermes-db"'))
+
         await send(
             {
                 "type": "http.response.start",
                 "status": status,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", b"0"),
-                ],
+                "headers": headers,
             }
         )
         await send({"type": "http.response.body", "body": b""})

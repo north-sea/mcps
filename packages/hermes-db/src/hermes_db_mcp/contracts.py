@@ -25,6 +25,8 @@ EDITABLE_TOPIC_FIELDS = frozenset(
         "column_name",
         "resonance",
         "content",
+        "revisit_of",
+        "mother_theme",
     ]
 )
 
@@ -44,6 +46,8 @@ CLEARABLE_TOPIC_FIELDS = frozenset(
         "column_name",
         "resonance",
         "content",
+        "revisit_of",
+        "mother_theme",
     ]
 )
 
@@ -90,6 +94,23 @@ class TopicListResult(TypedDict):
     total: int
 
 
+class RevisitChainItem(TypedDict):
+    """revisit_of 祖先链条目"""
+
+    id: str
+    title: str
+    status: str
+    created_at: str
+    published_url: str | None
+
+
+class RevisitChainResult(TypedDict):
+    """revisit_of 祖先链查询结果"""
+
+    items: list[RevisitChainItem]
+    truncated: bool
+
+
 class ToolError(TypedDict):
     """工具错误结果"""
 
@@ -115,6 +136,9 @@ ERROR_CODES = {
     "empty_ids": "批量 ids 为空",
     # 数据状态错误
     "not_found": "记录不存在",
+    "invalid_revisit_of_self": "revisit_of 不能指向自身",
+    "revisit_target_not_found": "revisit_of 指向的 topic 不存在",
+    "invalid_transition": "状态流转不合法",
     # 系统错误
     "embedding_unavailable": "embedding 服务不可用",
     "database_error": "数据库错误",

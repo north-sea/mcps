@@ -58,6 +58,8 @@ git push origin hermes-db-v0.1.1
 2. 构建 `linux/amd64` 镜像。
 3. 推送 `ghcr.io/northseacoder/hermes-db-mcp:v0.1.1`。
 4. 在 NAS self-hosted runner 上部署该版本。
+5. 如服务清单声明 migration，使用同一镜像执行 release migration。
+6. 如服务清单声明 MCP health smoke，调用 `health` 工具并校验必要 capabilities。
 
 如果同名镜像 tag 已存在，workflow 会失败，避免覆盖已发布版本。
 
@@ -127,6 +129,8 @@ NAS 上的真实配置通过本地覆盖文件提供，这些文件被 `.gitigno
 cp deploy/nas.example.env deploy/nas.local.env
 # 编辑 deploy/nas.local.env 填入 NAS 私有值
 ```
+
+环境变量名称必须与服务配置类一致，例如 `PG_DSN`、`REDIS_URL`、`EMBEDDING_BASE_URL`、`API_TOKEN`；不要再加服务名前缀。生产环境的 `API_TOKEN` 必须非空，部署 smoke 会读取 `deploy/mcp-services.json` 中 `health.tokenEnv` 指定的变量。
 
 ---
 

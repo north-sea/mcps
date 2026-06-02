@@ -1,7 +1,40 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 import asyncpg
 from pgvector.asyncpg import register_vector
+
+from hermes_db_mcp.config import settings
+
+
+def _age_days(created_at: datetime | None, now: datetime | None = None) -> int | None:
+    if created_at is None:
+        return None
+
+    current = now or datetime.now(timezone.utc)
+    if created_at.tzinfo is None and current.tzinfo is not None:
+        current = current.replace(tzinfo=None)
+    elif created_at.tzinfo is not None and current.tzinfo is None:
+        current = current.replace(tzinfo=created_at.tzinfo)
+
+    return (current - created_at).days
+
+
+def _compute_bucket(
+    similarity: float,
+    created_at: datetime | None,
+    now: datetime | None = None,
+    cfg=settings,
+) -> tuple[str, int | None]:
+    age_days = _age_days(created_at, now)
+
+    if similarity >= cfg.bucket_hard_threshold:
+        return "hard", age_days
+    if similarity >= cfg.bucket_soft_threshold:
+        if age_days is not None and age_days > cfg.bucket_revisit_days:
+            return "revisit", age_days
+        return "soft", age_days
+    return "weak", age_days
 
 
 async def ensure_vector_type(pool: asyncpg.Pool) -> None:
@@ -21,10 +54,15 @@ async def insert_topic(
     content: str | None = None,
     source: str = "topic-inbox",
     embedding: list[float] | None = None,
+    revisit_of: UUID | None = None,
+    mother_theme: str | None = None,
 ) -> dict:
     sql = """
-        INSERT INTO hermes.topics (title, angle, account, priority, column_name, resonance, content, source, embedding)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO hermes.topics (
+            title, angle, account, priority, column_name, resonance, content,
+            source, embedding, revisit_of, mother_theme
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id, status, created_at
     """
     async with pool.acquire() as conn:
@@ -40,6 +78,8 @@ async def insert_topic(
             content,
             source,
             embedding,
+            revisit_of,
+            mother_theme,
         )
     return dict(row)
 
@@ -76,7 +116,15 @@ async def find_similar(
     async with pool.acquire() as conn:
         await register_vector(conn)
         rows = await conn.fetch(sql, *params)
-    return [dict(r) for r in rows]
+    result = []
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        item = dict(row)
+        bucket, age_days = _compute_bucket(item["similarity"], item["created_at"], now)
+        item["bucket"] = bucket
+        item["age_days"] = age_days
+        result.append(item)
+    return result
 
 
 async def update_status(
@@ -106,7 +154,8 @@ async def publish(
 async def get_by_id(pool: asyncpg.Pool, *, topic_id: UUID) -> dict | None:
     sql = """
         SELECT id, title, angle, account, status, priority, column_name,
-               resonance, content, source, published_url, created_at, updated_at
+               resonance, content, source, published_url, revisit_of, mother_theme,
+               created_at, updated_at
         FROM hermes.topics WHERE id = $1
     """
     async with pool.acquire() as conn:
@@ -152,7 +201,7 @@ async def list_by_filter(
     count_sql = f"SELECT count(*) FROM hermes.topics {where}"
     list_sql = f"""
         SELECT id, title, angle, account, status, priority,
-               resonance, column_name, created_at
+               resonance, column_name, revisit_of, mother_theme, created_at
         FROM hermes.topics {where}
         ORDER BY created_at DESC
         LIMIT ${idx} OFFSET ${idx + 1}
@@ -220,7 +269,8 @@ async def update_topic_fields(
         SET {", ".join(set_clauses)}
         WHERE id = ${idx}
         RETURNING id, title, angle, account, status, priority, column_name,
-                  resonance, content, source, published_url, created_at, updated_at
+                  resonance, content, source, published_url, revisit_of,
+                  mother_theme, created_at, updated_at
     """
 
     async with pool.acquire() as conn:
@@ -284,3 +334,46 @@ async def batch_update_fields(
         rows = await conn.fetch(sql, *params)
 
     return [row["id"] for row in rows]
+
+
+async def get_revisit_chain(
+    pool: asyncpg.Pool,
+    *,
+    topic_id: UUID,
+    max_depth: int = 20,
+) -> dict:
+    if max_depth < 1:
+        max_depth = 1
+
+    visited: set[UUID] = set()
+    chain: list[dict] = []
+    current_id: UUID | None = topic_id
+    truncated = False
+
+    async with pool.acquire() as conn:
+        while current_id and len(chain) < max_depth:
+            if current_id in visited:
+                truncated = True
+                break
+
+            visited.add(current_id)
+            row = await conn.fetchrow(
+                """
+                SELECT id, title, status, created_at, published_url, revisit_of
+                FROM hermes.topics
+                WHERE id = $1
+                """,
+                current_id,
+            )
+            if not row:
+                break
+
+            item = dict(row)
+            next_id = item.pop("revisit_of")
+            chain.append(item)
+            current_id = next_id
+
+        if current_id is not None and len(chain) >= max_depth:
+            truncated = True
+
+    return {"items": chain, "truncated": truncated}

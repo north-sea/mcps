@@ -23,8 +23,10 @@ def validate_transition(entity_type: str, current: str, target: str) -> dict | N
     allowed = transitions.get(current, [])
     if target in allowed:
         return None
+    from hermes_db_mcp.contracts import error
+
     return {
-        "error": "invalid_transition",
+        **error("invalid_transition"),
         "from": current,
         "to": target,
         "allowed": allowed,

@@ -164,8 +164,34 @@ class TestUpdateTopicFieldsSQL:
         assert "content" in sql
         assert "source" in sql
         assert "published_url" in sql
+        assert "revisit_of" in sql
+        assert "mother_theme" in sql
         assert "created_at" in sql
         assert "updated_at" in sql
+
+    async def test_update_revisit_fields_sql(self, monkeypatch):
+        """revisit_of 和 mother_theme 可更新"""
+
+        async def noop_register(conn):
+            pass
+
+        monkeypatch.setattr(topic_repo, "register_vector", noop_register)
+
+        revisit_of = uuid4()
+        pool = FakePool(return_value={"id": uuid4()})
+        topic_id = uuid4()
+
+        await topic_repo.update_topic_fields(
+            pool,
+            topic_id=topic_id,
+            fields={"revisit_of": revisit_of, "mother_theme": "拖延-早晨场景"},
+        )
+
+        sql = pool.conn.sql
+        assert "revisit_of = $1" in sql
+        assert "mother_theme = $2" in sql
+        assert "WHERE id = $3" in sql
+        assert pool.conn.params == (revisit_of, "拖延-早晨场景", topic_id)
 
     async def test_update_invalid_field_raises(self):
         """不可编辑字段抛出异常"""

@@ -32,6 +32,8 @@ class TestConstants:
         assert "column_name" in EDITABLE_TOPIC_FIELDS
         assert "resonance" in EDITABLE_TOPIC_FIELDS
         assert "content" in EDITABLE_TOPIC_FIELDS
+        assert "revisit_of" in EDITABLE_TOPIC_FIELDS
+        assert "mother_theme" in EDITABLE_TOPIC_FIELDS
 
         # 不可编辑字段
         assert "status" not in EDITABLE_TOPIC_FIELDS
@@ -50,6 +52,8 @@ class TestConstants:
         assert "title" not in BULK_TOPIC_FIELDS
         assert "angle" not in BULK_TOPIC_FIELDS
         assert "content" not in BULK_TOPIC_FIELDS
+        assert "revisit_of" not in BULK_TOPIC_FIELDS
+        assert "mother_theme" not in BULK_TOPIC_FIELDS
 
     def test_clearable_fields_subset(self):
         """T001: 可清空字段是可编辑字段的子集,且不包含必填字段"""
@@ -58,6 +62,8 @@ class TestConstants:
         assert "column_name" in CLEARABLE_TOPIC_FIELDS
         assert "resonance" in CLEARABLE_TOPIC_FIELDS
         assert "content" in CLEARABLE_TOPIC_FIELDS
+        assert "revisit_of" in CLEARABLE_TOPIC_FIELDS
+        assert "mother_theme" in CLEARABLE_TOPIC_FIELDS
 
         # 必填字段不可清空
         assert "title" not in CLEARABLE_TOPIC_FIELDS
@@ -225,6 +231,11 @@ class TestErrorHelper:
         err = error("not_found")
         assert err["error"] == "not_found"
         assert "message" in err
+
+    def test_invalid_transition_error_is_known(self):
+        err = error("invalid_transition")
+        assert err["error"] == "invalid_transition"
+        assert err["message"] == "状态流转不合法"
 
     def test_error_with_field(self):
         """T002: 带字段的错误"""

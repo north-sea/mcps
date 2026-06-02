@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta
+from types import SimpleNamespace
+
 import pytest
 
 from hermes_db_mcp.repositories import topic_repo
@@ -55,3 +58,30 @@ async def test_find_similar_excludes_old_published_topics(monkeypatch):
     )
     assert "account = $4" in pool.conn.sql
     assert pool.conn.params == ([0.1, 0.2], 0.7, 3, "moon")
+
+
+def test_compute_bucket_boundaries():
+    cfg = SimpleNamespace(
+        bucket_hard_threshold=0.95,
+        bucket_soft_threshold=0.80,
+        bucket_revisit_days=90,
+    )
+    now = datetime(2026, 6, 1, 12, 0, 0)
+
+    assert topic_repo._compute_bucket(0.95, now - timedelta(days=30), now, cfg) == (
+        "hard",
+        30,
+    )
+    assert topic_repo._compute_bucket(0.80, now - timedelta(days=90), now, cfg) == (
+        "soft",
+        90,
+    )
+    assert topic_repo._compute_bucket(0.80, now - timedelta(days=91), now, cfg) == (
+        "revisit",
+        91,
+    )
+    assert topic_repo._compute_bucket(0.79, now - timedelta(days=30), now, cfg) == (
+        "weak",
+        30,
+    )
+    assert topic_repo._compute_bucket(0.90, None, now, cfg) == ("soft", None)

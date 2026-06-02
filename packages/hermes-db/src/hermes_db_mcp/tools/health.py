@@ -1,19 +1,23 @@
 from mcp.server.fastmcp import Context
+from mcp.types import ToolAnnotations
 
 from hermes_db_mcp.server import mcp, AppContext
 from hermes_db_mcp.config import settings
+from hermes_db_mcp.services.schema import inspect_topic_schema
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def health(ctx: Context) -> dict:
     """检查 PG、Redis、Embedding 三项服务的连接状态。"""
     app: AppContext = ctx.request_context.lifespan_context
     result = {}
+    pg_ok = False
 
     # PG
     try:
         await app.pool.fetchval("SELECT 1")
         result["pg"] = "ok"
+        pg_ok = True
     except Exception as e:
         result["pg"] = f"error: {e}"
 
@@ -40,5 +44,26 @@ async def health(ctx: Context) -> dict:
         result["embedding"] = "ok"
     except Exception as e:
         result["embedding"] = f"error: {e}"
+
+    result["version"] = settings.version
+    result["schema_revision"] = None
+    result["capabilities"] = {
+        "topic_bucket": False,
+        "topic_revisit_of": False,
+        "list_revisit_chain": False,
+    }
+
+    if pg_ok:
+        try:
+            result["schema_revision"] = await app.pool.fetchval(
+                "SELECT version_num FROM alembic_version LIMIT 1"
+            )
+        except Exception:
+            result["schema_revision"] = None
+
+        try:
+            result["capabilities"] = await inspect_topic_schema(app.pool)
+        except Exception as e:
+            result["schema_error"] = str(e)
 
     return result

@@ -11,11 +11,12 @@ Hermes 领域级 DB MCP Server — 语义化数据访问工具。
 | Tool | 说明 |
 |------|------|
 | `health` | PG/Redis/Embedding 三项探活 |
-| `create_topic` | 创建选题（自动 embedding + 缓存） |
-| `find_similar_topics` | 语义相似选题检索 |
+| `create_topic` | 创建选题（自动 embedding + 缓存；支持 `revisit_of` / `mother_theme`） |
+| `find_similar_topics` | 语义相似选题检索（返回 `similarity`、`bucket`、`age_days`） |
 | `update_topic_status` | 状态流转（内置状态机） |
 | `list_topics` | 列表查询（分页 + 过滤） |
 | `get_topic` | 单条详情（缓存优先） |
+| `list_revisit_chain` | 按 `revisit_of` 追溯母题迭代链 |
 | `create_novel_inspiration` | 创建灵感 |
 | `find_similar_inspirations` | 语义相似灵感检索 |
 | `list_inspirations` | 灵感列表 |
@@ -39,6 +40,35 @@ docker compose up -d
 ```
 
 Server 在 proxy 网络内监听 `8080` 端口，不映射宿主机端口。
+
+### 数据库迁移
+
+schema 变更使用 Alembic。迁移是发布步骤，不绑定普通服务 `ENTRYPOINT`：
+
+```bash
+docker compose run --rm --entrypoint alembic hermes-db-mcp upgrade head
+docker compose up -d hermes-db-mcp
+```
+
+`alembic upgrade head` 会根据数据库内的 `alembic_version` 判断待执行 revision；数据库已在最新版本时不会重复执行 DDL。镜像内包含 `alembic.ini` 和 `migrations/`，可用同一镜像执行迁移和启动服务。
+
+### topic bucket / revisit capabilities
+
+`health()` 返回以下能力键，供下游 agent 判断是否可以消费 server 端去重分档和母题链路：
+
+```json
+{
+  "version": "0.2.0",
+  "schema_revision": "0001_topic_revisit",
+  "capabilities": {
+    "topic_bucket": true,
+    "topic_revisit_of": true,
+    "list_revisit_chain": true
+  }
+}
+```
+
+`capabilities` 由当前数据库 schema 检测得出；如果 release migration 未执行，相关键会返回 `false`，下游应按未部署新能力处理。
 
 ## MCP Client 配置
 
@@ -110,3 +140,6 @@ Claude Code 使用 `headers` 字段：
 | `EMBEDDING_DIMENSION` | 1024 | 向量维度 |
 | `TRANSPORT` | stdio | stdio、sse 或 streamable-http |
 | `API_TOKEN` | - | HTTP/SSE bearer token；为空时不启用认证，生产环境必须配置 |
+| `BUCKET_HARD_THRESHOLD` | `0.95` | `find_similar_topics` hard bucket 阈值 |
+| `BUCKET_SOFT_THRESHOLD` | `0.80` | `find_similar_topics` soft/revisit bucket 阈值 |
+| `BUCKET_REVISIT_DAYS` | `90` | 超过该天数的中等相似选题返回 revisit bucket |

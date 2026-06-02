@@ -64,6 +64,7 @@ async def test_rejects_missing_bearer_token_with_json_response():
 
     assert messages[0]["status"] == 401
     assert _headers(messages[0])[b"content-type"].startswith(b"application/json")
+    assert _headers(messages[0])[b"www-authenticate"] == b'Bearer realm="hermes-db"'
     assert json.loads(messages[1]["body"]) == {"error": "unauthorized"}
 
 
@@ -184,6 +185,7 @@ async def test_unauthorized_head_probe_returns_empty_401_headers():
     assert messages[0]["status"] == 401
     assert _headers(messages[0])[b"content-type"] == b"application/json"
     assert _headers(messages[0])[b"content-length"] == b"0"
+    assert _headers(messages[0])[b"www-authenticate"] == b'Bearer realm="hermes-db"'
     assert messages[1]["body"] == b""
 
 

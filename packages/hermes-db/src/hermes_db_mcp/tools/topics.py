@@ -25,6 +25,7 @@ from hermes_db_mcp.contracts import (
     TopicUpdateResult,
     BatchTopicUpdateResult,
     TopicListResult,
+    RevisitChainResult,
     ToolError,
 )
 
@@ -47,16 +48,35 @@ async def create_topic(
     resonance: str | None = None,
     content: str | None = None,
     source: str = "topic-inbox",
+    revisit_of: str | None = None,
+    mother_theme: str | None = None,
 ) -> dict:
     """创建选题。自动生成 embedding 并写入 PG + Redis。"""
     app: AppContext = ctx.request_context.lifespan_context
 
     if not title:
-        return {"error": "missing_required_field", "field": "title"}
+        return error("missing_required_field", field="title")
     if not account:
-        return {"error": "missing_required_field", "field": "account"}
+        return error("missing_required_field", field="account")
     if len(title) > 200:
-        return {"error": "field_too_long", "field": "title", "max_length": 200}
+        return error(
+            "field_too_long",
+            field="title",
+            details={"max_length": 200, "actual_length": len(title)},
+        )
+
+    revisit_of_uuid = None
+    if revisit_of is not None:
+        try:
+            revisit_of_uuid = UUID(revisit_of)
+        except (ValueError, AttributeError):
+            return error(
+                "invalid_uuid", field="revisit_of", details={"value": revisit_of}
+            )
+
+        target = await topic_repo.get_by_id(app.pool, topic_id=revisit_of_uuid)
+        if not target:
+            return error("revisit_target_not_found", field="revisit_of")
 
     embed_text = f"{title} {angle}" if angle else title
     embedding = await generate_embedding(app.http, embed_text)
@@ -72,6 +92,8 @@ async def create_topic(
         content=content,
         source=source,
         embedding=embedding,
+        revisit_of=revisit_of_uuid,
+        mother_theme=mother_theme,
     )
 
     topic_id = str(row["id"])
@@ -98,7 +120,7 @@ async def find_similar_topics(
 
     embedding = await generate_embedding(app.http, text)
     if embedding is None:
-        return {"error": "embedding_unavailable", "message": "无法生成查询向量"}
+        return error("embedding_unavailable")
 
     rows = await topic_repo.find_similar(
         app.pool,
@@ -126,10 +148,14 @@ async def update_topic_status(id: str, new_status: str, ctx: Context) -> dict:
     """更新选题状态，内置状态机校验。"""
     app: AppContext = ctx.request_context.lifespan_context
 
-    topic_id = UUID(id)
+    try:
+        topic_id = UUID(id)
+    except (ValueError, AttributeError):
+        return error("invalid_uuid", field="id", details={"value": id})
+
     current = await topic_repo.get_by_id(app.pool, topic_id=topic_id)
     if not current:
-        return {"error": "not_found", "id": id}
+        return error("not_found", details={"id": id})
 
     err = validate_transition("topic", current["status"], new_status)
     if err:
@@ -138,6 +164,9 @@ async def update_topic_status(id: str, new_status: str, ctx: Context) -> dict:
     row = await topic_repo.update_status(
         app.pool, topic_id=topic_id, new_status=new_status
     )
+    if not row:
+        return error("not_found", details={"id": id})
+
     await cache_record(
         app.redis, f"hermes:topic:{id}", {**current, "status": new_status}
     )
@@ -161,10 +190,14 @@ async def publish_topic(id: str, published_url: str, ctx: Context) -> dict:
     """将选题标记为已发布，同时记录文章链接。仅 writing 状态可发布。"""
     app: AppContext = ctx.request_context.lifespan_context
 
-    topic_id = UUID(id)
+    try:
+        topic_id = UUID(id)
+    except (ValueError, AttributeError):
+        return error("invalid_uuid", field="id", details={"value": id})
+
     current = await topic_repo.get_by_id(app.pool, topic_id=topic_id)
     if not current:
-        return {"error": "not_found", "id": id}
+        return error("not_found", details={"id": id})
 
     err = validate_transition("topic", current["status"], "published")
     if err:
@@ -173,6 +206,9 @@ async def publish_topic(id: str, published_url: str, ctx: Context) -> dict:
     row = await topic_repo.publish(
         app.pool, topic_id=topic_id, published_url=published_url
     )
+    if not row:
+        return error("not_found", details={"id": id})
+
     await cache_record(
         app.redis,
         f"hermes:topic:{id}",
@@ -231,6 +267,8 @@ async def list_topics(
     )
     for item in items:
         item["id"] = str(item["id"])
+        if item.get("revisit_of") is not None:
+            item["revisit_of"] = str(item["revisit_of"])
         item["created_at"] = str(item["created_at"])
 
     result: TopicListResult = {"items": items, "total": total}
@@ -247,13 +285,19 @@ async def get_topic(id: str, ctx: Context) -> dict:
     if cached:
         return cached
 
-    topic_id = UUID(id)
+    try:
+        topic_id = UUID(id)
+    except (ValueError, AttributeError):
+        return error("invalid_uuid", field="id", details={"value": id})
+
     row = await topic_repo.get_by_id(app.pool, topic_id=topic_id)
     if not row:
-        return {"error": "not_found", "id": id}
+        return error("not_found", details={"id": id})
 
     result = {
-        k: str(v) if k in ("id", "created_at", "updated_at") else v
+        k: str(v)
+        if v is not None and k in ("id", "revisit_of", "created_at", "updated_at")
+        else v
         for k, v in row.items()
     }
     await cache_record(app.redis, cache_key, result)
@@ -277,6 +321,8 @@ async def update_topic(
     column_name: str | None = None,
     resonance: str | None = None,
     content: str | None = None,
+    revisit_of: str | None = None,
+    mother_theme: str | None = None,
     clear_fields: list[str] | None = None,
 ) -> TopicUpdateResult | ToolError:
     """
@@ -290,7 +336,9 @@ async def update_topic(
         column_name: 新专栏名(可选)
         resonance: 新共鸣度 高/中/低(可选)
         content: 新内容(可选)
-        clear_fields: 要清空的字段列表,只允许 angle/column_name/resonance/content
+        revisit_of: 母题回溯 id(可选)
+        mother_theme: 母题主题标签(可选)
+        clear_fields: 要清空的字段列表,只允许 nullable 可编辑字段
 
     Returns:
         成功: TopicUpdateResult 包含 id/updated_fields/embedding_regenerated/updated_at
@@ -319,6 +367,22 @@ async def update_topic(
     if not current:
         return error("not_found", details={"id": id})
 
+    revisit_of_uuid = None
+    if revisit_of is not None:
+        try:
+            revisit_of_uuid = UUID(revisit_of)
+        except (ValueError, AttributeError):
+            return error(
+                "invalid_uuid", field="revisit_of", details={"value": revisit_of}
+            )
+
+        if revisit_of_uuid == topic_id:
+            return error("invalid_revisit_of_self", field="revisit_of")
+
+        target = await topic_repo.get_by_id(app.pool, topic_id=revisit_of_uuid)
+        if not target:
+            return error("revisit_target_not_found", field="revisit_of")
+
     # 构造更新字段
     fields = {}
     if title is not None:
@@ -333,6 +397,10 @@ async def update_topic(
         fields["resonance"] = resonance
     if content is not None:
         fields["content"] = content
+    if revisit_of is not None:
+        fields["revisit_of"] = revisit_of_uuid
+    if mother_theme is not None:
+        fields["mother_theme"] = mother_theme
 
     # 处理 clear_fields
     if clear_fields:
@@ -357,6 +425,8 @@ async def update_topic(
         embedding_regenerated = True
         if new_embedding is None:
             embedding_pending = True
+
+    # revisit_of/mother_theme 只会改变元数据，不触发 embedding 重算
 
     # 执行更新
     try:
@@ -474,4 +544,33 @@ async def batch_update_topics(
         "not_found_ids": not_found_ids,
     }
 
+    return result
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def list_revisit_chain(
+    topic_id: str,
+    ctx: Context,
+    max_depth: int = 20,
+) -> RevisitChainResult | ToolError:
+    app: AppContext = ctx.request_context.lifespan_context
+
+    try:
+        parsed_topic_id = UUID(topic_id)
+    except (ValueError, AttributeError):
+        return error("invalid_uuid", field="topic_id", details={"value": topic_id})
+
+    if max_depth < 1:
+        max_depth = 1
+
+    result = await topic_repo.get_revisit_chain(
+        app.pool,
+        topic_id=parsed_topic_id,
+        max_depth=max_depth,
+    )
+    for item in result["items"]:
+        item["id"] = str(item["id"])
+        item["created_at"] = str(item["created_at"])
+        if item.get("published_url") is None:
+            item["published_url"] = None
     return result

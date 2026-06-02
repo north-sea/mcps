@@ -97,8 +97,10 @@ class TestSerializeTopicRow:
         """其他字段类型保持不变"""
         row = {
             "id": uuid4(),
+            "revisit_of": uuid4(),
             "title": "测试选题",
             "angle": "技术视角",
+            "mother_theme": "拖延-早晨场景",
             "priority": "A",
             "resonance": "高",
             "column_name": "技术专栏",
@@ -112,7 +114,9 @@ class TestSerializeTopicRow:
         result = serialize_topic_row(row)
 
         assert result["title"] == "测试选题"
+        assert result["revisit_of"] == str(row["revisit_of"])
         assert result["angle"] == "技术视角"
+        assert result["mother_theme"] == "拖延-早晨场景"
         assert result["priority"] == "A"
         assert result["resonance"] == "高"
         assert result["column_name"] == "技术专栏"
@@ -130,6 +134,8 @@ class TestSerializeTopicRow:
             "resonance": None,
             "content": None,
             "published_url": None,
+            "revisit_of": None,
+            "mother_theme": None,
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
         }
@@ -141,6 +147,8 @@ class TestSerializeTopicRow:
         assert result["resonance"] is None
         assert result["content"] is None
         assert result["published_url"] is None
+        assert result["revisit_of"] is None
+        assert result["mother_theme"] is None
 
     def test_serialize_field_set_matches_get_topic(self):
         """序列化字段集与 get_topic 返回一致"""
@@ -157,6 +165,8 @@ class TestSerializeTopicRow:
             "content": "详细内容",
             "source": "topic-inbox",
             "published_url": None,
+            "revisit_of": uuid4(),
+            "mother_theme": "拖延-早晨场景",
             "created_at": datetime.now(),
             "updated_at": datetime.now(),
         }
@@ -176,6 +186,8 @@ class TestSerializeTopicRow:
             "content",
             "source",
             "published_url",
+            "revisit_of",
+            "mother_theme",
             "created_at",
             "updated_at",
         }

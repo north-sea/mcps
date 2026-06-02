@@ -1,5 +1,3 @@
-import pytest
-
 from hermes_db_mcp.services.state_machine import validate_transition
 
 

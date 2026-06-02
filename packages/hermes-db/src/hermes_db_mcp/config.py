@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     embedding_dimension: int = 1024
     transport: str = "stdio"
     api_token: str = ""
+    bucket_hard_threshold: float = 0.95
+    bucket_soft_threshold: float = 0.80
+    bucket_revisit_days: int = 90
+    version: str = "0.2.0"
 
 
 settings = Settings()

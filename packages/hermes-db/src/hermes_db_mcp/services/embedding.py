@@ -18,5 +18,5 @@ async def generate_embedding(http: httpx.AsyncClient, text: str) -> list[float] 
         resp.raise_for_status()
         data = resp.json()
         return data["data"][0]["embedding"]
-    except (httpx.HTTPError, KeyError, IndexError):
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
         return None

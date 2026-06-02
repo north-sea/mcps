@@ -33,6 +33,8 @@ if (!/^v\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$/.test(version)) {
 const service = services[serviceName];
 const deploy = service.deploy ?? {};
 const test = service.test ?? {};
+const health = deploy.health ?? {};
+const migration = deploy.migration ?? {};
 
 const outputs = {
   service: serviceName,
@@ -48,6 +50,11 @@ const outputs = {
   compose_file: deploy.composeFile ?? "docker-compose.yml",
   compose_service: deploy.composeService ?? "",
   container_name: deploy.containerName ?? deploy.composeService ?? "",
+  migration_entrypoint: migration.entrypoint ?? "",
+  migration_command: migration.command ?? "",
+  smoke_url: health.url ?? "",
+  smoke_token_env: health.tokenEnv ?? "",
+  smoke_capabilities: (health.capabilities ?? []).join(","),
 };
 
 const githubOutput = process.env.GITHUB_OUTPUT;

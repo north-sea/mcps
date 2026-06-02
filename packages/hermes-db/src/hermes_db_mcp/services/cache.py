@@ -65,6 +65,8 @@ def serialize_topic_row(row: dict) -> dict:
         序列化后的字典,id/created_at/updated_at 转为字符串
     """
     return {
-        k: str(v) if k in ("id", "created_at", "updated_at") else v
+        k: str(v)
+        if v is not None and k in ("id", "revisit_of", "created_at", "updated_at")
+        else v
         for k, v in row.items()
     }

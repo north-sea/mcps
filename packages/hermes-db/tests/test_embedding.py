@@ -42,3 +42,11 @@ class TestEmbedding:
         )
         result = await generate_embedding(mock_http, "test text")
         assert result is None
+
+    @respx.mock
+    async def test_invalid_json_returns_none(self, mock_http):
+        respx.post("http://test-embedding:8080/embeddings").respond(
+            200, text="not json"
+        )
+        result = await generate_embedding(mock_http, "test text")
+        assert result is None

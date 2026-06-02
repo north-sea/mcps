@@ -1,5 +1,3 @@
-import pytest
-
 from hermes_db_mcp.repositories.inspiration_repo import VALID_CATEGORIES
 
 

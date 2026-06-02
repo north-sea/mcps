@@ -1,15 +1,24 @@
 from uuid import UUID
 
 from mcp.server.fastmcp import Context
+from mcp.types import ToolAnnotations
 
 from hermes_db_mcp.server import mcp, AppContext
 from hermes_db_mcp.services.embedding import generate_embedding
 from hermes_db_mcp.services.cache import cache_record, get_cached, update_recent_set
 from hermes_db_mcp.repositories import inspiration_repo
 from hermes_db_mcp.repositories.inspiration_repo import VALID_CATEGORIES
+from hermes_db_mcp.contracts import error
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
+)
 async def create_novel_inspiration(
     content: str,
     book_id: str,
@@ -22,17 +31,17 @@ async def create_novel_inspiration(
     app: AppContext = ctx.request_context.lifespan_context
 
     if not content:
-        return {"error": "missing_required_field", "field": "content"}
+        return error("missing_required_field", field="content")
     if not book_id:
-        return {"error": "missing_required_field", "field": "book_id"}
+        return error("missing_required_field", field="book_id")
     if not category:
-        return {"error": "missing_required_field", "field": "category"}
+        return error("missing_required_field", field="category")
     if category not in VALID_CATEGORIES:
-        return {
-            "error": "invalid_category",
-            "field": "category",
-            "allowed": sorted(VALID_CATEGORIES),
-        }
+        return error(
+            "invalid_field",
+            field="category",
+            details={"valid_values": sorted(VALID_CATEGORIES)},
+        )
 
     embed_text = f"{title} {content}" if title else content
     embedding = await generate_embedding(app.http, embed_text)
@@ -58,7 +67,7 @@ async def create_novel_inspiration(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def find_similar_inspirations(
     text: str,
     ctx: Context,
@@ -72,7 +81,7 @@ async def find_similar_inspirations(
 
     embedding = await generate_embedding(app.http, text)
     if embedding is None:
-        return {"error": "embedding_unavailable", "message": "无法生成查询向量"}
+        return error("embedding_unavailable")
 
     rows = await inspiration_repo.find_similar(
         app.pool,
@@ -89,7 +98,7 @@ async def find_similar_inspirations(
     return rows
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def list_inspirations(
     book_id: str,
     ctx: Context,
@@ -113,7 +122,7 @@ async def list_inspirations(
     return {"items": items, "total": total}
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 async def get_inspiration(id: str, ctx: Context) -> dict:
     """获取单条灵感详情，优先读 Redis 缓存。"""
     app: AppContext = ctx.request_context.lifespan_context
@@ -123,10 +132,14 @@ async def get_inspiration(id: str, ctx: Context) -> dict:
     if cached:
         return cached
 
-    inspiration_id = UUID(id)
+    try:
+        inspiration_id = UUID(id)
+    except (ValueError, AttributeError):
+        return error("invalid_uuid", field="id", details={"value": id})
+
     row = await inspiration_repo.get_by_id(app.pool, inspiration_id=inspiration_id)
     if not row:
-        return {"error": "not_found", "id": id}
+        return error("not_found", details={"id": id})
 
     result = {
         k: str(v) if k in ("id", "created_at", "updated_at") else v

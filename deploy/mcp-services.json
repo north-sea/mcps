@@ -14,8 +14,19 @@
         "composeFile": "docker-compose.yml",
         "composeService": "hermes-db-mcp",
         "containerName": "hermes-db-mcp",
+        "migration": {
+          "entrypoint": "alembic",
+          "command": "upgrade head"
+        },
         "health": {
-          "type": "container-running"
+          "type": "mcp-health",
+          "url": "http://127.0.0.1:8765/mcp",
+          "tokenEnv": "API_TOKEN",
+          "capabilities": [
+            "topic_bucket",
+            "topic_revisit_of",
+            "list_revisit_chain"
+          ]
         }
       }
     }
