@@ -3,15 +3,21 @@ import httpx
 from hermes_db_mcp.config import settings
 
 
+def build_embedding_payload(text: str) -> dict:
+    payload = {
+        "model": settings.embedding_model,
+        "input": text,
+    }
+    if settings.embedding_dimension > 0:
+        payload["dimensions"] = settings.embedding_dimension
+    return payload
+
+
 async def generate_embedding(http: httpx.AsyncClient, text: str) -> list[float] | None:
     try:
         resp = await http.post(
             "/embeddings",
-            json={
-                "model": settings.embedding_model,
-                "input": text,
-                "dimensions": settings.embedding_dimension,
-            },
+            json=build_embedding_payload(text),
             headers={"Authorization": f"Bearer {settings.embedding_api_key}"},
             timeout=3.0,
         )

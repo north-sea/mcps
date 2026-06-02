@@ -58,7 +58,7 @@ docker compose up -d hermes-db-mcp
 
 ```json
 {
-  "version": "0.2.6",
+  "version": "0.2.7",
   "schema_revision": "0001_topic_revisit",
   "capabilities": {
     "topic_bucket": true,
@@ -137,7 +137,7 @@ Claude Code 使用 `headers` 字段：
 | `EMBEDDING_BASE_URL` | - | OpenAI 兼容 embedding API |
 | `EMBEDDING_API_KEY` | - | API Key |
 | `EMBEDDING_MODEL` | text-embedding-v3 | 模型名 |
-| `EMBEDDING_DIMENSION` | 1024 | 向量维度 |
+| `EMBEDDING_DIMENSION` | 0 | 向量维度参数；`0` 表示请求 embedding 时不发送 `dimensions` |
 | `TRANSPORT` | stdio | stdio、sse 或 streamable-http |
 | `API_TOKEN` | - | HTTP/SSE bearer token；为空时不启用认证，生产环境必须配置 |
 | `BUCKET_HARD_THRESHOLD` | `0.95` | `find_similar_topics` hard bucket 阈值 |

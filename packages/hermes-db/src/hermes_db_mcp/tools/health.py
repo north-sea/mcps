@@ -3,6 +3,7 @@ from mcp.types import ToolAnnotations
 
 from hermes_db_mcp.server import mcp, AppContext
 from hermes_db_mcp.config import settings
+from hermes_db_mcp.services.embedding import build_embedding_payload
 from hermes_db_mcp.services.schema import inspect_topic_schema
 
 
@@ -32,11 +33,7 @@ async def health(ctx: Context) -> dict:
     try:
         resp = await app.http.post(
             "/embeddings",
-            json={
-                "model": settings.embedding_model,
-                "input": "ping",
-                "dimensions": settings.embedding_dimension,
-            },
+            json=build_embedding_payload("ping"),
             headers={"Authorization": f"Bearer {settings.embedding_api_key}"},
             timeout=3.0,
         )
