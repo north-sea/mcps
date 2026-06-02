@@ -94,8 +94,8 @@
 - [x] T019b [MCP Hardening] 为 HTTP 401 补 `WWW-Authenticate`，补齐 inspiration 工具 annotations，收敛常用错误到 `ToolError` helper。
   - 验证：middleware、inspiration、contract 单测覆盖新增行为。
 
-- [ ] T019 [Release Evidence, FR-011] 在目标环境执行 release migration 并启动 0.2.6 服务。
-  - 验证：migration 成功；`health().version >= "0.2.6"`；三个 capabilities 为 true；schema 与 CHECK 约束存在。
+- [x] T019 [Release Evidence, FR-011] 在目标环境执行 release migration 并启动 0.2.6 服务。
+  - 验证：GitHub Actions `MCP Release` run `26796453419` 成功；NAS `hermes-db-mcp` 运行 `ghcr.io/northseacoder/hermes-db-mcp:v0.2.6`；`health().version == "0.2.6"`；`schema_revision == "0001_topic_revisit"`；三个 capabilities 为 true；schema 与 CHECK/FK 约束存在。
 
 ---
 
