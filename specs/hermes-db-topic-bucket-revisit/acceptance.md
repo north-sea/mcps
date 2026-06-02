@@ -14,7 +14,8 @@
 | Ruff static check | PASS | `uv run ruff check .` -> All checks passed |
 | Alembic SQL generation | PASS | `uv run alembic upgrade head --sql` generated `0001_topic_revisit` SQL |
 | Whitespace check | PASS | `git diff --check` produced no output |
-| Release manifest resolution | PASS | `node scripts/resolve-mcp-release.mjs hermes-db-v0.2.0` resolved migration entrypoint `alembic`, command `upgrade head`, and MCP health smoke capabilities |
+| Release manifest resolution | PASS | `node scripts/resolve-mcp-release.mjs hermes-db-v0.2.1` resolved migration entrypoint `alembic`, command `upgrade head`, and MCP health smoke capabilities |
+| Release image immutability gate | PASS | `hermes-db-v0.2.0` was rejected because `ghcr.io/northseacoder/hermes-db-mcp:v0.2.0` already exists; release was bumped to `v0.2.1` instead of overwriting the existing image |
 | Deploy script syntax | PASS | `bash -n scripts/nas-deploy-mcp.sh` and workflow deploy shell body parsed successfully |
 | NAS baseline health | PASS | Current NAS `hermes-db-mcp` is still `v0.1.13`; `pg=ok`, `redis=ok`, no `version/schema_revision/capabilities` yet |
 | Local Docker build | BLOCKED | Build reached Docker Hub metadata resolution, then `python:3.12-slim` timed out; Dockerfile still covered by release workflow build |
@@ -44,7 +45,7 @@
 - T019 is not complete. Target environment still needs release migration and runtime verification:
   - `docker compose run --rm --entrypoint alembic hermes-db-mcp upgrade head`
   - `docker compose up -d hermes-db-mcp`
-  - verify `health().version == "0.2.0"`
+  - verify `health().version == "0.2.1"`
   - verify `health().schema_revision == "0001_topic_revisit"`
   - verify `health().capabilities.topic_bucket/topic_revisit_of/list_revisit_chain == true`
   - verify DB has `revisit_of`, `mother_theme`, `fk_topics_revisit_of`, `chk_topics_revisit_of_not_self`
