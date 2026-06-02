@@ -115,6 +115,13 @@ jobs:
       - nas
       - mcps-deploy
     steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
       - name: Deploy exact version
         env:
           SERVICE_NAME: ${{ needs.resolve.outputs.service }}
