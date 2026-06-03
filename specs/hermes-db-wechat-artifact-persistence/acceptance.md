@@ -2,7 +2,7 @@
 
 **Feature**: `hermes-db-wechat-artifact-persistence`  
 **Date**: 2026-06-03  
-**Status**: Implemented locally; NAS PG migrated for integration verification
+**Status**: Released to NAS
 
 ---
 
@@ -17,6 +17,11 @@
 | Workflow persistence integration | PASS | `DATABASE_URL=<NAS tunnel DSN> uv run pytest tests/test_workflow_integration.py -q` -> 1 passed |
 | Workflow artifact list contract | PASS | Tests assert `list_workflow_artifacts` and repository list output omit `content_text` |
 | Content reference policy | PASS | Tool/contract tests enforce `content_text` or `content_ref`; `content_ref` is returned as metadata and not dereferenced |
+| GitHub Actions release | PASS | `MCP Release` run `26882002492` completed successfully for `hermes-db-v0.2.9` |
+| NAS runtime image | PASS | `hermes-db-mcp` is running `ghcr.io/north-sea/hermes-db-mcp:v0.2.9` |
+| NAS runtime schema | PASS | Container `alembic current` reports `0002_wechat_workflow_artifacts (head)` |
+| NAS MCP health | PASS | `/mcp` health returned `version=0.2.9`, `schema_revision=0002_wechat_workflow_artifacts`, `pg=ok`, `redis=ok`, and all required capabilities true |
+| NAS MCP tools list | PASS | `tools/list` includes `upsert_workflow_run`, `finish_workflow_run`, `upsert_workflow_artifact`, `list_workflow_artifacts`, `get_workflow_artifact_content` |
 
 ---
 
@@ -30,13 +35,11 @@
 | Artifact version race | Mitigated for MVP: repository uses transaction-scoped advisory lock keyed by `run_id:stage:name` before computing next version. |
 | `content_ref` external IO ambiguity | Mitigated: MVP explicitly stores and returns refs only; no external file or URL dereference is attempted. |
 | Existing topic/inspiration compatibility | Mitigated: full hermes-db suite passes after adding tools and capabilities. |
-| Runtime container image not updated | Open: NAS PG schema is migrated, but `hermes-db-mcp` running container image still needs a release/deploy to expose the new tools at runtime. The current old container cannot resolve `0002_wechat_workflow_artifacts` with `alembic current` because that revision file is not in the image. |
+| Runtime container image not updated | Resolved: NAS runtime now uses `ghcr.io/north-sea/hermes-db-mcp:v0.2.9`, and container Alembic can resolve `0002_wechat_workflow_artifacts`. |
 | Downstream agents integration | Open: agents repo adapter/service is out of scope for this feature and remains the next consumer-side step. |
 
 ---
 
 ## Release / Deployment Follow-up
 
-- Build and release a new `hermes-db` image containing the `0002_wechat_workflow_artifacts` migration and new MCP tools.
-- Deploy/recreate `hermes-db-mcp` so runtime `health` can report `schema_revision=0002_wechat_workflow_artifacts` and `capabilities.workflow_runs/workflow_artifacts=true`.
 - Continue downstream implementation in `agents/specs/wechat-artifact-persistence`.
