@@ -62,6 +62,43 @@ MAX_BATCH_SIZE = 100
 MAX_WORKFLOW_INLINE_CONTENT_BYTES = 256 * 1024
 DEFAULT_WORKFLOW_ARTIFACT_LIMIT = 50
 MAX_WORKFLOW_ARTIFACT_LIMIT = 200
+DEFAULT_WECHAT_ARTICLE_LIMIT = 50
+MAX_WECHAT_ARTICLE_LIMIT = 200
+MAX_WECHAT_ARTICLE_REF_LENGTH = 2048
+
+WECHAT_ARTICLE_STATUSES = frozenset(
+    [
+        "drafted",
+        "published",
+        "published_missing_url",
+        "publish_reference_missing",
+        "archived",
+    ]
+)
+
+WECHAT_ARTICLE_REF_TYPES = frozenset(
+    [
+        "published_url",
+        "canonical_url",
+        "wechat_msg_id",
+        "wechat_biz_mid_idx_sn",
+        "youmind_ref",
+        "publish_target_ref",
+        "manual_repair",
+        "external_reference",
+    ]
+)
+
+WECHAT_ARTICLE_PATCH_FIELDS = frozenset(
+    [
+        "published_url",
+        "canonical_url",
+        "external_reference",
+        "status",
+        "published_at",
+        "metadata",
+    ]
+)
 
 
 # ============================================================================
@@ -151,6 +188,8 @@ ERROR_CODES = {
     "artifact_id_conflict": "artifact_id 已存在但内容 hash 不一致",
     "schema_drift": "数据库 schema 未满足工具要求",
     "invalid_filter": "查询过滤条件不合法",
+    # wechat article ledger
+    "conflict": "记录冲突",
 }
 
 
@@ -402,6 +441,195 @@ def validate_workflow_artifact_query(
         return error("invalid_field", field="offset", details={"actual": offset})
     _, topic_err = validate_optional_uuid(topic_id, "topic_id")
     return topic_err
+
+
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+def derive_publication_idempotency_key(
+    *,
+    account: str | None,
+    publication_idempotency_key: str | None = None,
+    publish_target: str | None = None,
+    canonical_url: str | None = None,
+    external_reference: str | None = None,
+    run_id: str | None = None,
+    publish_artifact_id: str | None = None,
+    published_artifact_id: str | None = None,
+) -> tuple[str | None, ToolError | None]:
+    explicit_key = _clean_text(publication_idempotency_key)
+    if explicit_key:
+        return explicit_key, None
+
+    account = _clean_text(account)
+    if not account:
+        return None, error("missing_required_field", field="account")
+
+    publish_target = _clean_text(publish_target) or "default"
+    canonical_url = _clean_text(canonical_url)
+    external_reference = _clean_text(external_reference)
+    run_id = _clean_text(run_id)
+    publish_artifact_id = _clean_text(publish_artifact_id)
+    published_artifact_id = _clean_text(published_artifact_id)
+
+    if canonical_url:
+        return f"{account}:{publish_target}:canonical_url:{canonical_url}", None
+    if external_reference:
+        return f"{account}:{publish_target}:external_reference:{external_reference}", None
+    if run_id and publish_artifact_id:
+        return f"{account}:run:{run_id}:publish_artifact:{publish_artifact_id}", None
+    if run_id and published_artifact_id:
+        return f"{account}:run:{run_id}:published_artifact:{published_artifact_id}", None
+    return None, error("missing_required_field", field="publication_idempotency_key")
+
+
+def validate_wechat_article_payload(
+    *,
+    account: str | None,
+    run_id: str | None,
+    status: str | None,
+    topic_id: str | None = None,
+    draft_artifact_id: str | None = None,
+    published_artifact_id: str | None = None,
+    publish_artifact_id: str | None = None,
+    published_url: str | None = None,
+    canonical_url: str | None = None,
+    external_reference: str | None = None,
+) -> ToolError | None:
+    for field, value in (
+        ("account", account),
+        ("run_id", run_id),
+        ("status", status),
+    ):
+        err = validate_required_text(value, field)
+        if err:
+            return err
+
+    if status not in WECHAT_ARTICLE_STATUSES:
+        return error(
+            "invalid_field",
+            field="status",
+            details={"valid_values": sorted(WECHAT_ARTICLE_STATUSES), "actual": status},
+        )
+
+    for field, value in (
+        ("topic_id", topic_id),
+    ):
+        _, uuid_err = validate_optional_uuid(value, field)
+        if uuid_err:
+            return uuid_err
+
+    for field, value in (
+        ("draft_artifact_id", draft_artifact_id),
+        ("published_artifact_id", published_artifact_id),
+        ("publish_artifact_id", publish_artifact_id),
+    ):
+        if value is not None and not str(value).strip():
+            return error("invalid_field", field=field)
+
+    refs = [
+        _clean_text(published_url),
+        _clean_text(canonical_url),
+        _clean_text(external_reference),
+    ]
+    if status == "published" and not any(refs):
+        return error(
+            "invalid_field",
+            field="published_url",
+            details={"reason": "published_requires_url_or_reference"},
+        )
+    if status == "published_missing_url" and not _clean_text(external_reference):
+        return error(
+            "invalid_field",
+            field="external_reference",
+            details={"reason": "published_missing_url_requires_reference"},
+        )
+    return None
+
+
+def validate_wechat_article_query(
+    *,
+    account: str | None = None,
+    topic_id: str | None = None,
+    run_id: str | None = None,
+    status: str | None = None,
+    publish_target: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    limit: int = DEFAULT_WECHAT_ARTICLE_LIMIT,
+    offset: int = 0,
+    explicit_limit: bool = False,
+) -> ToolError | None:
+    filters = [account, topic_id, run_id, status, publish_target, date_from, date_to]
+    if not any(value is not None for value in filters) and not explicit_limit:
+        return error("invalid_filter", details={"reason": "filter_or_explicit_limit_required"})
+    if status is not None and status not in WECHAT_ARTICLE_STATUSES:
+        return error(
+            "invalid_field",
+            field="status",
+            details={"valid_values": sorted(WECHAT_ARTICLE_STATUSES), "actual": status},
+        )
+    if limit < 1 or limit > MAX_WECHAT_ARTICLE_LIMIT:
+        return error(
+            "invalid_field",
+            field="limit",
+            details={"min": 1, "max": MAX_WECHAT_ARTICLE_LIMIT, "actual": limit},
+        )
+    if offset < 0:
+        return error("invalid_field", field="offset", details={"actual": offset})
+    _, topic_err = validate_optional_uuid(topic_id, "topic_id")
+    return topic_err
+
+
+def validate_wechat_article_ref_payload(
+    *,
+    refs: list[dict] | None = None,
+    patch: dict | None = None,
+) -> ToolError | None:
+    refs = refs or []
+    patch = patch or {}
+    if not refs and not patch:
+        return error("missing_required_field", field="refs")
+
+    invalid_patch_fields = set(patch) - WECHAT_ARTICLE_PATCH_FIELDS
+    if invalid_patch_fields:
+        return error(
+            "invalid_field",
+            field="patch",
+            details={"invalid_fields": sorted(invalid_patch_fields)},
+        )
+    if "status" in patch and patch["status"] not in WECHAT_ARTICLE_STATUSES:
+        return error(
+            "invalid_field",
+            field="status",
+            details={"valid_values": sorted(WECHAT_ARTICLE_STATUSES), "actual": patch["status"]},
+        )
+
+    for idx, ref in enumerate(refs):
+        ref_type = ref.get("ref_type")
+        ref_value = _clean_text(ref.get("ref_value"))
+        if ref_type not in WECHAT_ARTICLE_REF_TYPES:
+            return error(
+                "invalid_field",
+                field=f"refs[{idx}].ref_type",
+                details={"valid_values": sorted(WECHAT_ARTICLE_REF_TYPES), "actual": ref_type},
+            )
+        if not ref_value:
+            return error("missing_required_field", field=f"refs[{idx}].ref_value")
+        if len(ref_value) > MAX_WECHAT_ARTICLE_REF_LENGTH:
+            return error(
+                "field_too_long",
+                field=f"refs[{idx}].ref_value",
+                details={
+                    "max_length": MAX_WECHAT_ARTICLE_REF_LENGTH,
+                    "actual_length": len(ref_value),
+                },
+            )
+    return None
 
 
 def error(

@@ -171,3 +171,106 @@ async def inspect_workflow_schema(pool: asyncpg.Pool) -> dict[str, bool]:
             "idx_workflow_artifacts_stage_name",
         }.issubset(indexes),
     }
+
+
+async def inspect_wechat_publication_ledger_schema(pool: asyncpg.Pool) -> dict[str, bool]:
+    article_columns = await _fetch_column_names(pool, "hermes", "wechat_articles")
+    ref_columns = await _fetch_column_names(pool, "hermes", "wechat_article_external_refs")
+    article_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "wechat_articles_pkey",
+            "uq_wechat_articles_account_idempotency",
+            "chk_wechat_articles_status",
+            "chk_wechat_articles_reference_for_published",
+        ),
+        table_name="wechat_articles",
+    )
+    ref_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "wechat_article_external_refs_pkey",
+            "chk_wechat_article_external_refs_type",
+            "chk_wechat_article_external_refs_value_nonempty",
+        ),
+        table_name="wechat_article_external_refs",
+    )
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_wechat_articles_account_created",
+            "idx_wechat_articles_account_status_created",
+            "idx_wechat_articles_topic_created",
+            "idx_wechat_articles_run_id",
+            "idx_wechat_articles_published_url",
+            "idx_wechat_articles_canonical_url",
+            "idx_wechat_articles_publish_target_created",
+            "uq_wechat_article_external_ref_active",
+            "uq_wechat_article_external_ref_article_active",
+            "idx_wechat_article_refs_article_created",
+            "idx_wechat_article_refs_type_value_active",
+        ),
+    )
+
+    article_required = {
+        "article_id",
+        "publication_idempotency_key",
+        "account",
+        "topic_id",
+        "run_id",
+        "task_id",
+        "draft_artifact_id",
+        "published_artifact_id",
+        "publish_artifact_id",
+        "status",
+        "dry_run",
+        "title",
+        "published_url",
+        "canonical_url",
+        "publish_target",
+        "external_reference",
+        "metadata",
+        "published_at",
+        "created_at",
+        "updated_at",
+    }
+    ref_required = {
+        "ref_id",
+        "article_id",
+        "ref_type",
+        "ref_value",
+        "ref_source",
+        "is_primary",
+        "metadata",
+        "superseded_at",
+        "created_at",
+        "updated_at",
+    }
+
+    return {
+        "wechat_publication_ledger": article_required.issubset(article_columns)
+        and ref_required.issubset(ref_columns)
+        and {
+            "uq_wechat_articles_account_idempotency",
+            "chk_wechat_articles_status",
+            "chk_wechat_articles_reference_for_published",
+        }.issubset(article_constraints)
+        and {
+            "chk_wechat_article_external_refs_type",
+            "chk_wechat_article_external_refs_value_nonempty",
+        }.issubset(ref_constraints)
+        and {
+            "idx_wechat_articles_account_created",
+            "idx_wechat_articles_account_status_created",
+            "idx_wechat_articles_topic_created",
+            "idx_wechat_articles_run_id",
+            "idx_wechat_articles_published_url",
+            "idx_wechat_articles_canonical_url",
+            "idx_wechat_articles_publish_target_created",
+            "uq_wechat_article_external_ref_active",
+            "uq_wechat_article_external_ref_article_active",
+            "idx_wechat_article_refs_article_created",
+            "idx_wechat_article_refs_type_value_active",
+        }.issubset(indexes),
+    }

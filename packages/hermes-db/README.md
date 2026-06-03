@@ -22,6 +22,10 @@ Hermes 领域级 DB MCP Server — 语义化数据访问工具。
 | `upsert_workflow_artifact` | 保存 workflow artifact 摘要、hash、metadata 和正文或引用 |
 | `list_workflow_artifacts` | 按 run/topic/account/date/type 查询 workflow artifact 摘要 |
 | `get_workflow_artifact_content` | 读取 workflow artifact 的 inline 正文或 `content_ref` metadata |
+| `upsert_wechat_article` | 创建或更新公众号 article ledger 主记录 |
+| `list_wechat_articles` | 按 account/topic/run/status/date 查询 article 摘要 |
+| `get_wechat_article` | 读取 article ledger 详情和外部引用列表 |
+| `update_wechat_article_external_refs` | 补写或修复 article 外部引用 |
 | `create_novel_inspiration` | 创建灵感 |
 | `find_similar_inspirations` | 语义相似灵感检索 |
 | `list_inspirations` | 灵感列表 |
@@ -57,20 +61,21 @@ docker compose up -d hermes-db-mcp
 
 `alembic upgrade head` 会根据数据库内的 `alembic_version` 判断待执行 revision；数据库已在最新版本时不会重复执行 DDL。镜像内包含 `alembic.ini` 和 `migrations/`，可用同一镜像执行迁移和启动服务。
 
-### topic bucket / revisit / workflow artifact capabilities
+### topic bucket / revisit / workflow / publication ledger capabilities
 
-`health()` 返回以下能力键，供下游 agent 判断是否可以消费 server 端去重分档、母题链路和 workflow artifact 持久化：
+`health()` 返回以下能力键，供下游 agent 判断是否可以消费 server 端去重分档、母题链路、workflow artifact 持久化和公众号发布台账：
 
 ```json
 {
-  "version": "0.2.9",
-  "schema_revision": "0002_wechat_workflow_artifacts",
+  "version": "0.2.10",
+  "schema_revision": "0003_wechat_publication_ledger",
   "capabilities": {
     "topic_bucket": true,
     "topic_revisit_of": true,
     "list_revisit_chain": true,
     "workflow_runs": true,
-    "workflow_artifacts": true
+    "workflow_artifacts": true,
+    "wechat_publication_ledger": true
   }
 }
 ```
@@ -80,6 +85,10 @@ docker compose up -d hermes-db-mcp
 ### workflow artifact persistence
 
 Workflow artifact tools 只负责持久化和查询，不编排公众号 workflow。正文小于 256 KiB 时可写入 `content_text`；更大的产物应写入 `content_ref`，hermes-db 只保存并返回引用，不读取外部文件或 URL。`list_workflow_artifacts` 默认只返回摘要，不返回 `content_text`；需要正文时调用 `get_workflow_artifact_content`。
+
+### wechat publication ledger
+
+Article ledger tools 负责保存公众号文章发布台账，不调用微信发布 API，也不复制 artifact 正文。`upsert_wechat_article` 以 `(account, publication_idempotency_key)` 保证幂等；`article_id` 由服务端生成。`wechat_articles` 通过 FK 关联 workflow run 和已存在的 draft/final/publish artifacts；外部 URL、微信平台标识、YouMind 引用和人工修复引用写入 `wechat_article_external_refs`。`list_wechat_articles` 和 `get_wechat_article` 只返回 article 元数据、artifact id 和 external refs，不返回 artifact content。
 
 ## MCP Client 配置
 

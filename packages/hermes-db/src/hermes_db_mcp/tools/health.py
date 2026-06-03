@@ -4,7 +4,11 @@ from mcp.types import ToolAnnotations
 from hermes_db_mcp.server import mcp, AppContext
 from hermes_db_mcp.config import settings
 from hermes_db_mcp.services.embedding import build_embedding_payload
-from hermes_db_mcp.services.schema import inspect_topic_schema, inspect_workflow_schema
+from hermes_db_mcp.services.schema import (
+    inspect_topic_schema,
+    inspect_wechat_publication_ledger_schema,
+    inspect_workflow_schema,
+)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -50,6 +54,7 @@ async def health(ctx: Context) -> dict:
         "list_revisit_chain": False,
         "workflow_runs": False,
         "workflow_artifacts": False,
+        "wechat_publication_ledger": False,
     }
 
     if pg_ok:
@@ -64,6 +69,7 @@ async def health(ctx: Context) -> dict:
             result["capabilities"] = {
                 **await inspect_topic_schema(app.pool),
                 **await inspect_workflow_schema(app.pool),
+                **await inspect_wechat_publication_ledger_schema(app.pool),
             }
         except Exception as e:
             result["schema_error"] = str(e)

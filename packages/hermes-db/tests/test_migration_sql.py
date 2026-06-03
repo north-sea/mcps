@@ -32,3 +32,22 @@ def test_workflow_artifact_migration_contains_required_schema_changes():
     assert "uq_workflow_artifact_logical_hash" in migration
     assert "idx_workflow_artifacts_run_created" in migration
     assert "idx_workflow_artifacts_stage_name" in migration
+
+
+def test_wechat_publication_ledger_migration_contains_required_schema_changes():
+    migration = Path(
+        "migrations/versions/0003_wechat_publication_ledger.py"
+    ).read_text()
+
+    assert 'down_revision: Union[str, None] = "0002_wechat_workflow_artifacts"' in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.wechat_articles" in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.wechat_article_external_refs" in migration
+    assert "REFERENCES hermes.wechat_workflow_runs(run_id)" in migration
+    assert "REFERENCES hermes.workflow_artifacts(artifact_id)" in migration
+    assert "uq_wechat_articles_account_idempotency" in migration
+    assert "chk_wechat_articles_status" in migration
+    assert "chk_wechat_articles_reference_for_published" in migration
+    assert "uq_wechat_article_external_ref_active" in migration
+    assert "uq_wechat_article_external_ref_article_active" in migration
+    assert "idx_wechat_articles_account_status_created" in migration
+    assert "idx_wechat_article_refs_type_value_active" in migration

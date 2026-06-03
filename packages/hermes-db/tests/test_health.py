@@ -28,13 +28,14 @@ async def test_health_returns_version_and_capabilities():
 
     result = await health(ctx)
 
-    assert result["version"] == "0.2.9"
+    assert result["version"] == "0.2.10"
     assert result["capabilities"] == {
         "topic_bucket": True,
         "topic_revisit_of": True,
         "list_revisit_chain": True,
         "workflow_runs": True,
         "workflow_artifacts": True,
+        "wechat_publication_ledger": True,
     }
     assert result["schema_revision"] == "0001_topic_revisit"
 
@@ -86,6 +87,7 @@ async def test_health_disables_capabilities_when_pg_is_unavailable(monkeypatch):
         "list_revisit_chain": False,
         "workflow_runs": False,
         "workflow_artifacts": False,
+        "wechat_publication_ledger": False,
     }
 
 
@@ -112,4 +114,14 @@ def schema_inspector(monkeypatch):
     monkeypatch.setattr(
         "hermes_db_mcp.tools.health.inspect_workflow_schema",
         inspect_workflow_schema,
+    )
+
+    async def inspect_wechat_publication_ledger_schema(pool):
+        return {
+            "wechat_publication_ledger": True,
+        }
+
+    monkeypatch.setattr(
+        "hermes_db_mcp.tools.health.inspect_wechat_publication_ledger_schema",
+        inspect_wechat_publication_ledger_schema,
     )
