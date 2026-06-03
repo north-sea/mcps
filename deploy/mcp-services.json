@@ -1,7 +1,7 @@
 {
   "services": {
     "hermes-db": {
-      "image": "ghcr.io/northseacoder/hermes-db-mcp",
+      "image": "ghcr.io/north-sea/hermes-db-mcp",
       "context": "packages/hermes-db",
       "dockerfile": "packages/hermes-db/Dockerfile",
       "platforms": ["linux/amd64"],

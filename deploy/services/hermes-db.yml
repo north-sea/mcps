@@ -1,6 +1,6 @@
 services:
   hermes-db-mcp:
-    image: ${REGISTRY:-ghcr.io/northseacoder}/hermes-db-mcp:${TAG:?set TAG to a concrete version like v0.1.1}
+    image: ${REGISTRY:-ghcr.io/north-sea}/hermes-db-mcp:${TAG:?set TAG to a concrete version like v0.1.1}
     container_name: hermes-db-mcp
     env_file:
       - ../nas.local.env

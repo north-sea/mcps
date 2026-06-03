@@ -112,8 +112,9 @@ jobs:
       - resolve
       - build
     runs-on:
+      - self-hosted
       - nas
-      - mcps-deploy
+      - deploy
     steps:
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -154,11 +155,8 @@ jobs:
             exit 1
           fi
 
-          cat > "${override_file}" <<EOF
-          services:
-            ${COMPOSE_SERVICE}:
-              image: ${image_ref}
-          EOF
+          printf 'services:\n  %s:\n    image: %s\n' "${COMPOSE_SERVICE}" "${image_ref}" > "${override_file}"
+          docker compose -f "${COMPOSE_FILE}" -f "${override_file}" config | grep -F "image: ${image_ref}"
 
           echo "Deploying ${SERVICE_NAME} ${VERSION} from ${image_ref}"
           docker compose -f "${COMPOSE_FILE}" -f "${override_file}" pull "${COMPOSE_SERVICE}"

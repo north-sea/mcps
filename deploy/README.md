@@ -12,7 +12,7 @@ service tag -> GitHub Actions build -> GHCR push -> NAS runner pull/up
 
 1. **service tag**：在 Git 中创建服务级版本 tag，例如 `hermes-db-v0.1.1`。
 2. **build**：GitHub Actions 根据 `deploy/mcp-services.json` 解析服务、构建上下文和镜像名。
-3. **push**：镜像推送到 GHCR，例如 `ghcr.io/northseacoder/hermes-db-mcp:v0.1.1`。
+3. **push**：镜像推送到 GHCR，例如 `ghcr.io/north-sea/hermes-db-mcp:v0.1.1`。
 4. **NAS deploy**：NAS self-hosted runner 拉取这个精确版本并重启对应 compose service。
 
 NAS 部署只使用具体版本号，不使用 `latest`、`main` 或 commit sha tag。
@@ -56,7 +56,7 @@ git push origin hermes-db-v0.1.1
 
 1. 运行 `packages/hermes-db` 的测试。
 2. 构建 `linux/amd64` 镜像。
-3. 推送 `ghcr.io/northseacoder/hermes-db-mcp:v0.1.1`。
+3. 推送 `ghcr.io/north-sea/hermes-db-mcp:v0.1.1`。
 4. 在 NAS self-hosted runner 上部署该版本。
 5. 如服务清单声明 migration，使用同一镜像执行 release migration。
 6. 如服务清单声明 MCP health smoke，调用 `health` 工具并校验必要 capabilities。
@@ -67,7 +67,7 @@ git push origin hermes-db-v0.1.1
 
 ## NAS self-hosted runner
 
-NAS runner 需要注册到本仓库。由于本仓库是 public repo，不应启用默认 runner labels，避免普通 `runs-on: self-hosted` 作业误落到 NAS。
+NAS runner 需要注册到 `north-sea` org-level runner group `nas-deploy`。由于本仓库是 public repo，不应只使用默认 runner labels，避免普通 `runs-on: self-hosted` 作业误落到 NAS。
 
 注册时使用：
 
@@ -75,9 +75,10 @@ NAS runner 需要注册到本仓库。由于本仓库是 public repo，不应启
 ./config.sh --unattended \
   --url https://github.com/NorthSeacoder/mcps \
   --token <registration-token> \
-  --name nas-mcps-deploy \
+  --name nas-org-deploy \
   --no-default-labels \
-  --labels nas,mcps-deploy \
+  --runnergroup nas-deploy \
+  --labels nas,deploy \
   --work _work \
   --replace
 ```
@@ -102,7 +103,7 @@ workflow 会优先使用 `GHCR_TOKEN`，没有配置时才回退到 `GITHUB_TOKE
 ```yaml
 services:
   hermes-db-mcp:
-    image: ghcr.io/northseacoder/hermes-db-mcp:v0.1.1
+    image: ghcr.io/north-sea/hermes-db-mcp:v0.1.1
 ```
 
 这样现有 NAS compose 文件无需提交真实密钥，也不需要依赖 `latest`。
