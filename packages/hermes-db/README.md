@@ -61,21 +61,22 @@ docker compose up -d hermes-db-mcp
 
 `alembic upgrade head` 会根据数据库内的 `alembic_version` 判断待执行 revision；数据库已在最新版本时不会重复执行 DDL。镜像内包含 `alembic.ini` 和 `migrations/`，可用同一镜像执行迁移和启动服务。
 
-### topic bucket / revisit / workflow / publication ledger capabilities
+### topic bucket / revisit / workflow / publication ledger / analytics capabilities
 
-`health()` 返回以下能力键，供下游 agent 判断是否可以消费 server 端去重分档、母题链路、workflow artifact 持久化和公众号发布台账：
+`health()` 返回以下能力键，供下游 agent 判断是否可以消费 server 端去重分档、母题链路、workflow artifact 持久化、公众号发布台账和微信文章数据导入：
 
 ```json
 {
-  "version": "0.2.10",
-  "schema_revision": "0003_wechat_publication_ledger",
+  "version": "0.2.11",
+  "schema_revision": "0004_wechat_analytics_ingestion",
   "capabilities": {
     "topic_bucket": true,
     "topic_revisit_of": true,
     "list_revisit_chain": true,
     "workflow_runs": true,
     "workflow_artifacts": true,
-    "wechat_publication_ledger": true
+    "wechat_publication_ledger": true,
+    "wechat_analytics_ingestion": true
   }
 }
 ```
@@ -89,6 +90,10 @@ Workflow artifact tools 只负责持久化和查询，不编排公众号 workflo
 ### wechat publication ledger
 
 Article ledger tools 负责保存公众号文章发布台账，不调用微信发布 API，也不复制 artifact 正文。`upsert_wechat_article` 以 `(account, publication_idempotency_key)` 保证幂等；`article_id` 由服务端生成。`wechat_articles` 通过 FK 关联 workflow run 和已存在的 draft/final/publish artifacts；外部 URL、微信平台标识、YouMind 引用和人工修复引用写入 `wechat_article_external_refs`。`list_wechat_articles` 和 `get_wechat_article` 只返回 article 元数据、artifact id 和 external refs，不返回 artifact content。
+
+### wechat analytics ingestion
+
+Analytics ingestion tools 负责保存已由 agents 侧 normalizer 转换好的微信文章指标，不解析 Excel/CSV/JSON 文件。`bulk_upsert_wechat_article_metric_snapshots` 以 `(article_id, stat_date, window_label, source)` 幂等写入文章指标快照，并以 `(article_id, metric_date, channel, source)` 幂等写入渠道日明细。`list_wechat_article_metric_snapshots` 支持按 account、article、date window 和 `window_label` 查询；默认不返回 `raw_json`，需要调试原始行时传 `include_raw=true`。
 
 ## MCP Client 配置
 

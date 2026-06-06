@@ -28,7 +28,8 @@
             "list_revisit_chain",
             "workflow_runs",
             "workflow_artifacts",
-            "wechat_publication_ledger"
+            "wechat_publication_ledger",
+            "wechat_analytics_ingestion"
           ]
         }
       }

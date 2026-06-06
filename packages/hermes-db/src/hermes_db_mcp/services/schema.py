@@ -274,3 +274,159 @@ async def inspect_wechat_publication_ledger_schema(pool: asyncpg.Pool) -> dict[s
             "idx_wechat_article_refs_type_value_active",
         }.issubset(indexes),
     }
+
+
+async def inspect_wechat_analytics_ingestion_schema(pool: asyncpg.Pool) -> dict[str, bool]:
+    import_columns = await _fetch_column_names(pool, "hermes", "analytics_import_runs")
+    snapshot_columns = await _fetch_column_names(pool, "hermes", "wechat_article_metric_snapshots")
+    channel_columns = await _fetch_column_names(
+        pool,
+        "hermes",
+        "wechat_article_channel_daily_metrics",
+    )
+    import_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "analytics_import_runs_pkey",
+            "chk_analytics_import_runs_status",
+            "chk_analytics_import_runs_counts_nonnegative",
+        ),
+        table_name="analytics_import_runs",
+    )
+    snapshot_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "wechat_article_metric_snapshots_pkey",
+            "wechat_article_metric_snapshots_article_id_fkey",
+            "wechat_article_metric_snapshots_import_run_id_fkey",
+            "uq_wechat_article_metric_snapshot_identity",
+            "chk_wechat_article_metric_snapshot_counts_nonnegative",
+            "chk_wechat_article_metric_snapshot_completion_rate",
+        ),
+        table_name="wechat_article_metric_snapshots",
+    )
+    channel_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "wechat_article_channel_daily_metrics_pkey",
+            "wechat_article_channel_daily_metrics_article_id_fkey",
+            "wechat_article_channel_daily_metrics_import_run_id_fkey",
+            "uq_wechat_article_channel_daily_identity",
+            "chk_wechat_article_channel_daily_counts_nonnegative",
+        ),
+        table_name="wechat_article_channel_daily_metrics",
+    )
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_analytics_import_runs_account_created",
+            "idx_analytics_import_runs_source_created",
+            "idx_analytics_import_runs_status_created",
+            "idx_wechat_article_metric_snapshots_account_stat",
+            "idx_wechat_article_metric_snapshots_article_stat",
+            "idx_wechat_article_metric_snapshots_window_stat",
+            "idx_wechat_article_metric_snapshots_source_stat",
+            "idx_wechat_article_metric_snapshots_import_run",
+            "idx_wechat_article_channel_daily_account_date",
+            "idx_wechat_article_channel_daily_article_date",
+            "idx_wechat_article_channel_daily_channel_date",
+            "idx_wechat_article_channel_daily_import_run",
+        ),
+    )
+
+    import_required = {
+        "import_run_id",
+        "account",
+        "source",
+        "status",
+        "total_rows",
+        "created",
+        "updated",
+        "skipped",
+        "unmatched",
+        "errors",
+        "metadata",
+        "created_at",
+        "updated_at",
+    }
+    snapshot_required = {
+        "snapshot_id",
+        "article_id",
+        "account",
+        "stat_date",
+        "window_label",
+        "source",
+        "read_user_count",
+        "average_stay_seconds",
+        "completion_rate",
+        "new_follow_user_count",
+        "share_user_count",
+        "wow_user_count",
+        "like_user_count",
+        "favorite_user_count",
+        "reward_cents",
+        "comment_count",
+        "delivered_user_count",
+        "account_message_read_user_count",
+        "first_share_user_count",
+        "total_share_user_count",
+        "share_generated_read_user_count",
+        "missing_fields",
+        "raw_json",
+        "import_run_id",
+        "collected_at",
+        "created_at",
+        "updated_at",
+    }
+    channel_required = {
+        "metric_id",
+        "article_id",
+        "account",
+        "metric_date",
+        "channel",
+        "source",
+        "read_user_count",
+        "share_user_count",
+        "raw_json",
+        "import_run_id",
+        "created_at",
+        "updated_at",
+    }
+
+    return {
+        "wechat_analytics_ingestion": import_required.issubset(import_columns)
+        and snapshot_required.issubset(snapshot_columns)
+        and channel_required.issubset(channel_columns)
+        and {
+            "chk_analytics_import_runs_status",
+            "chk_analytics_import_runs_counts_nonnegative",
+        }.issubset(import_constraints)
+        and {
+            "wechat_article_metric_snapshots_article_id_fkey",
+            "wechat_article_metric_snapshots_import_run_id_fkey",
+            "uq_wechat_article_metric_snapshot_identity",
+            "chk_wechat_article_metric_snapshot_counts_nonnegative",
+            "chk_wechat_article_metric_snapshot_completion_rate",
+        }.issubset(snapshot_constraints)
+        and {
+            "wechat_article_channel_daily_metrics_article_id_fkey",
+            "wechat_article_channel_daily_metrics_import_run_id_fkey",
+            "uq_wechat_article_channel_daily_identity",
+            "chk_wechat_article_channel_daily_counts_nonnegative",
+        }.issubset(channel_constraints)
+        and {
+            "idx_analytics_import_runs_account_created",
+            "idx_analytics_import_runs_source_created",
+            "idx_analytics_import_runs_status_created",
+            "idx_wechat_article_metric_snapshots_account_stat",
+            "idx_wechat_article_metric_snapshots_article_stat",
+            "idx_wechat_article_metric_snapshots_window_stat",
+            "idx_wechat_article_metric_snapshots_source_stat",
+            "idx_wechat_article_metric_snapshots_import_run",
+            "idx_wechat_article_channel_daily_account_date",
+            "idx_wechat_article_channel_daily_article_date",
+            "idx_wechat_article_channel_daily_channel_date",
+            "idx_wechat_article_channel_daily_import_run",
+        }.issubset(indexes),
+    }

@@ -103,6 +103,7 @@ NAS 私有配置（PG_DSN、REDIS_URL、密钥等）通过 `deploy/nas.local.env
 6. 对 `hermes-db-v0.2.0` 及之后版本，确认 `health().capabilities.topic_bucket`、`topic_revisit_of`、`list_revisit_chain` 均为 `true`。
 7. 对 `hermes-db-v0.2.9` 及之后版本，确认 `health().schema_revision == "0002_wechat_workflow_artifacts"`，且 `health().capabilities.workflow_runs`、`workflow_artifacts` 均为 `true`。
 8. 对包含 `0003_wechat_publication_ledger` 的版本，确认 `health().schema_revision == "0003_wechat_publication_ledger"`，且 `health().capabilities.wechat_publication_ledger == true`；`tools/list` 应包含 `upsert_wechat_article`、`list_wechat_articles`、`get_wechat_article`、`update_wechat_article_external_refs`。
-9. 确认无误后归档原仓。
+9. 对包含 `0004_wechat_analytics_ingestion` 的版本，确认 `health().schema_revision == "0004_wechat_analytics_ingestion"`，且 `health().capabilities.wechat_analytics_ingestion == true`；`tools/list` 应包含 `bulk_upsert_wechat_article_metric_snapshots`、`list_wechat_article_metric_snapshots`。
+10. 确认无误后归档原仓。
 
 在切换完成前，原仓的运行态保持可用，两者可并存。

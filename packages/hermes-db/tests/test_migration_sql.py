@@ -51,3 +51,33 @@ def test_wechat_publication_ledger_migration_contains_required_schema_changes():
     assert "uq_wechat_article_external_ref_article_active" in migration
     assert "idx_wechat_articles_account_status_created" in migration
     assert "idx_wechat_article_refs_type_value_active" in migration
+
+
+def test_wechat_analytics_ingestion_migration_contains_required_schema_changes():
+    migration = Path(
+        "migrations/versions/0004_wechat_analytics_ingestion.py"
+    ).read_text()
+
+    assert 'down_revision: Union[str, None] = "0003_wechat_publication_ledger"' in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.analytics_import_runs" in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.wechat_article_metric_snapshots" in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.wechat_article_channel_daily_metrics" in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.wechat_article_audience_profiles" not in migration
+    assert "REFERENCES hermes.wechat_articles(article_id) ON DELETE CASCADE" in migration
+    assert "REFERENCES hermes.analytics_import_runs(import_run_id) ON DELETE SET NULL" in migration
+    assert "chk_analytics_import_runs_status" in migration
+    assert "chk_analytics_import_runs_counts_nonnegative" in migration
+    assert "uq_wechat_article_metric_snapshot_identity" in migration
+    assert "chk_wechat_article_metric_snapshot_counts_nonnegative" in migration
+    assert "chk_wechat_article_metric_snapshot_completion_rate" in migration
+    assert "uq_wechat_article_channel_daily_identity" in migration
+    assert "chk_wechat_article_channel_daily_counts_nonnegative" in migration
+    assert "idx_analytics_import_runs_account_created" in migration
+    assert "idx_wechat_article_metric_snapshots_account_stat" in migration
+    assert "idx_wechat_article_metric_snapshots_article_stat" in migration
+    assert "idx_wechat_article_metric_snapshots_source_stat" in migration
+    assert "idx_wechat_article_channel_daily_account_date" in migration
+    assert "idx_wechat_article_channel_daily_article_date" in migration
+    assert "DROP TABLE IF EXISTS hermes.wechat_article_channel_daily_metrics" in migration
+    assert "DROP TABLE IF EXISTS hermes.wechat_article_metric_snapshots" in migration
+    assert "DROP TABLE IF EXISTS hermes.analytics_import_runs" in migration

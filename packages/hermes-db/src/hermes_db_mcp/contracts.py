@@ -8,6 +8,7 @@ Topic 写接口契约、常量、校验 helper 和结构化结果模型。
 - 通用校验 helper
 """
 
+from datetime import date
 from typing import TypedDict, NotRequired
 from uuid import UUID
 
@@ -65,6 +66,8 @@ MAX_WORKFLOW_ARTIFACT_LIMIT = 200
 DEFAULT_WECHAT_ARTICLE_LIMIT = 50
 MAX_WECHAT_ARTICLE_LIMIT = 200
 MAX_WECHAT_ARTICLE_REF_LENGTH = 2048
+DEFAULT_WECHAT_ANALYTICS_LIMIT = 50
+MAX_WECHAT_ANALYTICS_LIMIT = 200
 
 WECHAT_ARTICLE_STATUSES = frozenset(
     [
@@ -97,6 +100,51 @@ WECHAT_ARTICLE_PATCH_FIELDS = frozenset(
         "status",
         "published_at",
         "metadata",
+    ]
+)
+
+WECHAT_ANALYTICS_SOURCES = frozenset(
+    [
+        "manual_json",
+        "manual_csv",
+        "manual_xls",
+        "wechat_api",
+        "browser_automation",
+        "manual_patch",
+    ]
+)
+
+WECHAT_ANALYTICS_RESPONSE_STATUSES = frozenset(
+    [
+        "completed",
+        "completed_with_errors",
+        "failed",
+        "dry_run",
+    ]
+)
+
+WECHAT_ANALYTICS_COUNT_FIELDS = frozenset(
+    [
+        "read_user_count",
+        "new_follow_user_count",
+        "share_user_count",
+        "wow_user_count",
+        "like_user_count",
+        "favorite_user_count",
+        "reward_cents",
+        "comment_count",
+        "delivered_user_count",
+        "account_message_read_user_count",
+        "first_share_user_count",
+        "total_share_user_count",
+        "share_generated_read_user_count",
+    ]
+)
+
+WECHAT_ANALYTICS_CHANNEL_COUNT_FIELDS = frozenset(
+    [
+        "read_user_count",
+        "share_user_count",
     ]
 )
 
@@ -450,6 +498,56 @@ def _clean_text(value: str | None) -> str | None:
     return value or None
 
 
+def _is_valid_iso_date(value: str | None) -> bool:
+    if not _clean_text(value):
+        return False
+    try:
+        date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _validate_allowed_source(source: str | None, field: str = "source") -> ToolError | None:
+    source = _clean_text(source)
+    if not source:
+        return error("missing_required_field", field=field)
+    if source not in WECHAT_ANALYTICS_SOURCES:
+        return error(
+            "invalid_field",
+            field=field,
+            details={"valid_values": sorted(WECHAT_ANALYTICS_SOURCES), "actual": source},
+        )
+    return None
+
+
+def _validate_nonnegative_int(value, field: str) -> ToolError | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return error("invalid_field", field=field, details={"actual": value})
+    return None
+
+
+def _validate_nonnegative_number(value, field: str) -> ToolError | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return error("invalid_field", field=field, details={"actual": value})
+    return None
+
+
+def _has_article_resolution_fact(record: dict) -> bool:
+    fields = (
+        "article_id",
+        "published_url",
+        "canonical_url",
+        "external_reference",
+        "ref_value",
+    )
+    return any(_clean_text(record.get(field)) for field in fields)
+
+
 def derive_publication_idempotency_key(
     *,
     account: str | None,
@@ -629,6 +727,192 @@ def validate_wechat_article_ref_payload(
                     "actual_length": len(ref_value),
                 },
             )
+    return None
+
+
+def validate_wechat_metric_record(record: dict, *, source: str | None = None) -> ToolError | None:
+    if not isinstance(record, dict):
+        return error("invalid_field", field="records[]")
+
+    if not _has_article_resolution_fact(record):
+        return error("missing_required_field", field="article_id")
+    if _clean_text(record.get("article_id")):
+        _, article_err = validate_optional_uuid(record.get("article_id"), "article_id")
+        if article_err:
+            return article_err
+
+    for field in ("stat_date", "window_label"):
+        err = validate_required_text(record.get(field), field)
+        if err:
+            return err
+    if not _is_valid_iso_date(record.get("stat_date")):
+        return error("invalid_field", field="stat_date", details={"actual": record.get("stat_date")})
+
+    record_source = record.get("source") or source
+    source_err = _validate_allowed_source(record_source, "source")
+    if source_err:
+        return source_err
+
+    for field in WECHAT_ANALYTICS_COUNT_FIELDS:
+        count_err = _validate_nonnegative_int(record.get(field), field)
+        if count_err:
+            return count_err
+
+    stay_err = _validate_nonnegative_number(
+        record.get("average_stay_seconds"),
+        "average_stay_seconds",
+    )
+    if stay_err:
+        return stay_err
+
+    completion_rate = record.get("completion_rate")
+    if completion_rate is not None:
+        if (
+            isinstance(completion_rate, bool)
+            or not isinstance(completion_rate, (int, float))
+            or completion_rate < 0
+            or completion_rate > 1
+        ):
+            return error(
+                "invalid_field",
+                field="completion_rate",
+                details={"min": 0, "max": 1, "actual": completion_rate},
+            )
+
+    missing_fields = record.get("missing_fields")
+    if missing_fields is not None and not isinstance(missing_fields, list):
+        return error("invalid_field", field="missing_fields")
+    raw_json = record.get("raw_json")
+    if raw_json is not None and not isinstance(raw_json, dict):
+        return error("invalid_field", field="raw_json")
+    return None
+
+
+def validate_wechat_channel_metric(record: dict, *, source: str | None = None) -> ToolError | None:
+    if not isinstance(record, dict):
+        return error("invalid_field", field="channel_daily_metrics[]")
+
+    if not _has_article_resolution_fact(record):
+        return error("missing_required_field", field="article_id")
+    if _clean_text(record.get("article_id")):
+        _, article_err = validate_optional_uuid(record.get("article_id"), "article_id")
+        if article_err:
+            return article_err
+
+    for field in ("metric_date", "channel"):
+        err = validate_required_text(record.get(field), field)
+        if err:
+            return err
+    if not _is_valid_iso_date(record.get("metric_date")):
+        return error(
+            "invalid_field",
+            field="metric_date",
+            details={"actual": record.get("metric_date")},
+        )
+
+    record_source = record.get("source") or source
+    source_err = _validate_allowed_source(record_source, "source")
+    if source_err:
+        return source_err
+
+    for field in WECHAT_ANALYTICS_CHANNEL_COUNT_FIELDS:
+        count_err = _validate_nonnegative_int(record.get(field), field)
+        if count_err:
+            return count_err
+
+    raw_json = record.get("raw_json")
+    if raw_json is not None and not isinstance(raw_json, dict):
+        return error("invalid_field", field="raw_json")
+    return None
+
+
+def validate_wechat_analytics_bulk_payload(
+    *,
+    account: str | None,
+    source: str | None,
+    records: list[dict] | None,
+    channel_daily_metrics: list[dict] | None = None,
+    audience_profiles: list[dict] | None = None,
+    import_metadata: dict | None = None,
+) -> tuple[dict, ToolError | None]:
+    summary = {
+        "audience_profiles_skipped": len(audience_profiles or []),
+        "skip_reasons": [],
+    }
+
+    account_err = validate_required_text(account, "account")
+    if account_err:
+        return summary, account_err
+    source_err = _validate_allowed_source(source)
+    if source_err:
+        return summary, source_err
+    if not records:
+        return summary, error("missing_required_field", field="records")
+    if not isinstance(records, list):
+        return summary, error("invalid_field", field="records")
+    if channel_daily_metrics is not None and not isinstance(channel_daily_metrics, list):
+        return summary, error("invalid_field", field="channel_daily_metrics")
+    if audience_profiles is not None and not isinstance(audience_profiles, list):
+        return summary, error("invalid_field", field="audience_profiles")
+    if import_metadata is not None and not isinstance(import_metadata, dict):
+        return summary, error("invalid_field", field="import_metadata")
+
+    for idx, record in enumerate(records):
+        record_err = validate_wechat_metric_record(record, source=source)
+        if record_err:
+            record_err["field"] = f"records[{idx}].{record_err.get('field', 'record')}"
+            return summary, record_err
+
+    for idx, metric in enumerate(channel_daily_metrics or []):
+        metric_err = validate_wechat_channel_metric(metric, source=source)
+        if metric_err:
+            metric_err["field"] = (
+                f"channel_daily_metrics[{idx}].{metric_err.get('field', 'record')}"
+            )
+            return summary, metric_err
+
+    if audience_profiles:
+        summary["skip_reasons"].append("audience_profiles_not_supported_in_mvp")
+    return summary, None
+
+
+def validate_wechat_metric_query(
+    *,
+    account: str | None = None,
+    article_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    window_label: str | None = None,
+    limit: int = DEFAULT_WECHAT_ANALYTICS_LIMIT,
+    offset: int = 0,
+    include_raw: bool = False,
+    explicit_limit: bool = False,
+) -> ToolError | None:
+    filters = [account, article_id, date_from, date_to, window_label]
+    if not any(value is not None for value in filters) and not explicit_limit:
+        return error("invalid_filter", details={"reason": "filter_or_explicit_limit_required"})
+    if limit < 1 or limit > MAX_WECHAT_ANALYTICS_LIMIT:
+        return error(
+            "invalid_field",
+            field="limit",
+            details={"min": 1, "max": MAX_WECHAT_ANALYTICS_LIMIT, "actual": limit},
+        )
+    if offset < 0:
+        return error("invalid_field", field="offset", details={"actual": offset})
+    if not isinstance(include_raw, bool):
+        return error("invalid_field", field="include_raw", details={"actual": include_raw})
+    _, article_err = validate_optional_uuid(article_id, "article_id")
+    if article_err:
+        return article_err
+    for field, value in (("date_from", date_from), ("date_to", date_to)):
+        if value is not None and not _is_valid_iso_date(value):
+            return error("invalid_field", field=field, details={"actual": value})
+    if date_from and date_to and date.fromisoformat(date_from) > date.fromisoformat(date_to):
+        return error(
+            "invalid_filter",
+            field="date_from",
+            details={"reason": "date_from_after_date_to"},
+        )
     return None
 
 
