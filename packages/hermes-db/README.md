@@ -79,7 +79,7 @@ docker compose up -d hermes-db-mcp
 
 ```json
 {
-  "version": "0.2.14",
+  "version": "0.2.15",
   "schema_revision": "0005_wechat_retro_opt",
   "capabilities": {
     "topic_bucket": true,
