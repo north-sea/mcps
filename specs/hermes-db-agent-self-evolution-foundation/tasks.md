@@ -116,12 +116,12 @@
   - maps_to: verification
   - verify: contracts/repo/tools/health targeted tests pass.
 
-- [ ] T019 Deployed live smoke
+- [x] T019 Deployed live smoke
   - scope: NAS/deployed MCP endpoint
   - maps_to: workflow replay
   - verify: approved candidate -> promote policy -> query applicable policy -> record application -> list application.
 
-- [ ] T020 Acceptance record
+- [x] T020 Acceptance record
   - scope: `specs/hermes-db-agent-self-evolution-foundation/acceptance.md`
   - maps_to: closeout
   - verify: Evidence Table, Verdict Summary, Workflow Replay and Completion Record complete.
