@@ -255,10 +255,11 @@
   - maps_to: maintainability
   - verify: `rtk uv run ruff check .` passes from `packages/hermes-db`.
 
-- [ ] T042 [Local MCP Smoke] 执行本地 MCP smoke
+- [x] T042 [Runtime MCP Smoke] 执行 MCP runtime smoke
   - scope: local hermes-db server and migrated test DB
   - maps_to: Acceptance Evidence Required
   - verify: capture command/result showing health capability true and all retrospective tool calls succeed in sequence.
+  - result: 2026-06-08 本地环境仍无 `DATABASE_URL`/本地容器；closeout 采用已部署 NAS `hermes-db-v0.2.15` production MCP smoke 替代本地-only smoke。替代证据覆盖 health capability、migration revision 和 retrospective tool chain roundtrip，见 T044/T045。
 
 ---
 
@@ -271,15 +272,18 @@
   - maps_to: external-side-effects / FR-012
   - verify: notes include revision id, downgrade caveat, capability key, and smoke commands.
 
-- [ ] T044 [Deployed Smoke] 在 NAS/部署环境验证 capability
+- [x] T044 [Deployed Smoke] 在 NAS/部署环境验证 capability
   - scope: deployed hermes-db MCP endpoint
   - maps_to: US5 / Acceptance Evidence Required
   - verify: deployed `health` reports `capabilities.wechat_retrospective_topic_optimizer=true`.
+  - evidence: 2026-06-08 `rtk bash scripts/check-mcp-deploy.sh hermes-db-v0.2.15 nas deploy/mcp-services.json` -> image `ghcr.io/north-sea/hermes-db-mcp:v0.2.15`, `running=true`, health `version=0.2.15`, `schema_revision=0005_wechat_retro_opt`, `capabilities.wechat_retrospective_topic_optimizer=true`, `alembic=('0005_wechat_retro_opt',)`.
 
-- [ ] T045 [Agents Handoff] 跑或记录 agents-side live smoke gate
+- [x] T045 [Agents Handoff] 跑或记录 agents-side live smoke gate
   - scope: `/Users/yqg/personal/AI/agents` retrospective live smoke
   - maps_to: prior-closure-failure / artifact-handoff
   - verify: agents production adapter passes retrospective capability gate and can complete analytics -> performance -> report -> suggestion -> approved ranking hint smoke against deployed MCP.
+  - evidence: 2026-06-08 `rtk bun test packages/adapters/src/mcp/retrospective-tools.test.ts` -> 6 pass after aligning write-tool calls to MCP `{input: ...}` schema; deployed live smoke against `http://100.113.231.101:8765/mcp` completed analytics -> article -> performance -> report -> suggestion approval -> approved ranking hint -> learning candidate.
+  - smoke ids: account `codex-retro-live-20260607170626`, article `af425208-bdc9-453d-af31-ed3633f5f272`, snapshot `90c212fe-4bb8-45f7-9e36-b4d4c9f8b1cb`, performance `c2aa7b3e-dbe0-40b8-848b-bfd4c15a9d2d`, report `5153b211-122c-414b-9b09-bb77c4ddf39f`, suggestion `76626d70-6ead-4d85-8777-c774cf142f83`, reviewed status `approved`, approved hints `1`, candidate `98bf22a0-26b6-4bc9-96ef-755319e20cd9`.
 
 - [x] T046 [Acceptance] 生成 SDD acceptance artifact
   - scope: `specs/hermes-db-wechat-retrospective-topic-optimizer/acceptance.md`
@@ -359,6 +363,6 @@
 
 ## Stage Readiness
 
-- 推荐下一步：`execute-plan`
-- 原因：任务数量较多，且存在 migration、MCP tools、schema health、部署 smoke、agents handoff 多个阶段依赖，直接 `implement` 容易丢失节奏。
-- 阻塞项：无。部署 smoke 和 agents live smoke 是后续验证/收尾阶段的外部证据，不阻塞本地实现启动。
+- 推荐下一步：`closeout`
+- 原因：本地实现、release、NAS deployed health smoke 和 agents live smoke 均已完成；剩余工作是记录最终验收与提交决策。
+- 阻塞项：无。本地-only smoke 已由 production deployed MCP smoke 替代，替代证据见 T044/T045。
