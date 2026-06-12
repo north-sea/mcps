@@ -327,7 +327,22 @@ jobs:
           GHCR_PASSWORD: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          printf '%s' "${GHCR_PASSWORD}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+          # NAS runner reaches ghcr.io through a local proxy (daemon.json proxies);
+          # the proxy occasionally drops the TLS handshake (EOF) on login. Retry with
+          # backoff so a transient proxy blip does not fail the whole deploy.
+          for attempt in 1 2 3 4 5; do
+            if printf '%s' "${GHCR_PASSWORD}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin; then
+              echo "GHCR login succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            if [[ "${attempt}" -lt 5 ]]; then
+              delay=$((attempt * 5))
+              echo "GHCR login attempt ${attempt} failed; retrying in ${delay}s..." >&2
+              sleep "${delay}"
+            fi
+          done
+          echo "GHCR login failed after 5 attempts" >&2
+          exit 1
 
       - name: Deploy exact version
         env:
