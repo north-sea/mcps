@@ -1,4 +1,31 @@
+import re
 from pathlib import Path
+
+# Postgres alembic_version.version_num is varchar(32); a revision id longer than
+# this fails at `UPDATE alembic_version` during deploy (after build + image push),
+# which we have hit twice. Guard it here so CI fails in the test phase instead.
+ALEMBIC_VERSION_NUM_MAX_LEN = 32
+
+_REVISION_RE = re.compile(r'^revision: str = "(?P<rev>[^"]+)"', re.MULTILINE)
+
+
+def test_all_migration_revision_ids_fit_alembic_version_column():
+    versions_dir = Path("migrations/versions")
+    migrations = sorted(versions_dir.glob("[0-9]*.py"))
+    assert migrations, "expected at least one migration under migrations/versions"
+
+    offenders = []
+    for migration in migrations:
+        match = _REVISION_RE.search(migration.read_text())
+        assert match, f"could not find revision id in {migration.name}"
+        rev = match.group("rev")
+        if len(rev) > ALEMBIC_VERSION_NUM_MAX_LEN:
+            offenders.append((migration.name, rev, len(rev)))
+
+    assert not offenders, (
+        "revision ids exceed alembic_version varchar(32) limit and will fail "
+        f"at deploy time: {offenders}"
+    )
 
 
 def test_topic_revisit_migration_contains_required_schema_changes():
