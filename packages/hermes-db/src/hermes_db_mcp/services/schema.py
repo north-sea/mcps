@@ -837,3 +837,184 @@ async def inspect_agent_self_evolution_foundation_schema(
             "idx_policy_applications_domain_task",
         }.issubset(indexes),
     }
+
+
+async def inspect_novel_agent_books_chapters_schema(
+    pool: asyncpg.Pool,
+) -> dict[str, bool]:
+    """Check novel agent schema capability (migration 0007).
+
+    Validates that all 7 tables for novel agent persistence exist with
+    required columns, foreign keys, and indexes.
+    """
+    books_columns = await _fetch_column_names(pool, "hermes", "novel_books")
+    chapters_columns = await _fetch_column_names(pool, "hermes", "novel_chapters")
+    analyses_columns = await _fetch_column_names(pool, "hermes", "novel_chapter_analyses")
+    profiles_columns = await _fetch_column_names(pool, "hermes", "novel_style_profiles")
+    anchors_columns = await _fetch_column_names(pool, "hermes", "novel_style_anchors")
+    reports_columns = await _fetch_column_names(pool, "hermes", "novel_validation_reports")
+    runs_columns = await _fetch_column_names(pool, "hermes", "novel_analysis_runs")
+
+    chapters_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_chapters_pkey",
+            "novel_chapters_book_slug_fkey",
+            "uq_novel_chapters_book_number",
+        ),
+        table_name="novel_chapters",
+    )
+    analyses_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_chapter_analyses_pkey",
+            "novel_chapter_analyses_chapter_id_fkey",
+            "uq_novel_chapter_analyses_chapter",
+        ),
+        table_name="novel_chapter_analyses",
+    )
+    profiles_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_style_profiles_pkey",
+            "novel_style_profiles_book_slug_fkey",
+            "uq_novel_style_profiles_book_version",
+            "chk_novel_style_profiles_version_positive",
+        ),
+        table_name="novel_style_profiles",
+    )
+    anchors_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_style_anchors_pkey",
+            "novel_style_anchors_style_profile_id_fkey",
+            "novel_style_anchors_chapter_id_fkey",
+        ),
+        table_name="novel_style_anchors",
+    )
+
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_novel_books_created_at",
+            "idx_novel_chapters_book_slug",
+            "idx_novel_chapter_analyses_chapter_id",
+            "idx_novel_style_profiles_book_active",
+            "idx_novel_style_anchors_profile",
+            "idx_novel_style_anchors_chapter",
+            "idx_novel_validation_reports_book_created",
+            "idx_novel_analysis_runs_book_started",
+        ),
+    )
+
+    books_required = {
+        "book_slug",
+        "title",
+        "author",
+        "total_chapters",
+        "created_at",
+        "updated_at",
+    }
+    chapters_required = {
+        "chapter_id",
+        "book_slug",
+        "chapter_number",
+        "title",
+        "content",
+        "word_count",
+        "split_source",
+        "created_at",
+        "updated_at",
+    }
+    analyses_required = {
+        "id",
+        "chapter_id",
+        "summary",
+        "plot_points",
+        "characters",
+        "conflicts",
+        "hooks",
+        "dialogue_samples_by_dimension",
+        "style_signals",
+        "created_at",
+        "updated_at",
+    }
+    profiles_required = {
+        "id",
+        "book_slug",
+        "version",
+        "active",
+        "summary",
+        "dimensions",
+        "prompt_template",
+        "created_at",
+        "updated_at",
+    }
+    anchors_required = {
+        "id",
+        "style_profile_id",
+        "dimension",
+        "text",
+        "chapter_id",
+        "line_range",
+        "created_at",
+    }
+    reports_required = {
+        "id",
+        "book_slug",
+        "is_valid",
+        "total_chapters",
+        "warnings",
+        "errors",
+        "created_at",
+    }
+    runs_required = {
+        "id",
+        "book_slug",
+        "started_at",
+        "completed_at",
+        "stage",
+        "chapters_status",
+        "error",
+        "created_at",
+        "updated_at",
+    }
+
+    return {
+        "novel_agent_books_chapters": books_required.issubset(books_columns)
+        and chapters_required.issubset(chapters_columns)
+        and analyses_required.issubset(analyses_columns)
+        and profiles_required.issubset(profiles_columns)
+        and anchors_required.issubset(anchors_columns)
+        and reports_required.issubset(reports_columns)
+        and runs_required.issubset(runs_columns)
+        and {
+            "novel_chapters_book_slug_fkey",
+            "uq_novel_chapters_book_number",
+        }.issubset(chapters_constraints)
+        and {
+            "novel_chapter_analyses_chapter_id_fkey",
+            "uq_novel_chapter_analyses_chapter",
+        }.issubset(analyses_constraints)
+        and {
+            "novel_style_profiles_book_slug_fkey",
+            "uq_novel_style_profiles_book_version",
+            "chk_novel_style_profiles_version_positive",
+        }.issubset(profiles_constraints)
+        and {
+            "novel_style_anchors_style_profile_id_fkey",
+            "novel_style_anchors_chapter_id_fkey",
+        }.issubset(anchors_constraints)
+        and {
+            "idx_novel_books_created_at",
+            "idx_novel_chapters_book_slug",
+            "idx_novel_chapter_analyses_chapter_id",
+            "idx_novel_style_profiles_book_active",
+            "idx_novel_style_anchors_profile",
+            "idx_novel_style_anchors_chapter",
+            "idx_novel_validation_reports_book_created",
+            "idx_novel_analysis_runs_book_started",
+        }.issubset(indexes),
+    }
+
