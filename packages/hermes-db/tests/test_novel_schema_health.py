@@ -118,6 +118,10 @@ class TestNovelSchemaHealthCheck:
 
         # Mock 缺少 novel_chapters 表的字段
         async def mock_fetch(query, *args):
+            # 如果查询的是约束名称（pg_constraint）
+            if "pg_constraint" in query:
+                return []  # 返回空约束列表
+
             table_name = args[1] if len(args) > 1 else ""
 
             if table_name == "novel_chapters":

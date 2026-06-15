@@ -39,6 +39,7 @@ async def test_health_returns_version_and_capabilities():
         "wechat_analytics_ingestion": True,
         "wechat_retrospective_topic_optimizer": True,
         "agent_self_evolution_foundation": True,
+        "novel_agent_books_chapters": False,
     }
     assert result["schema_revision"] == "0001_topic_revisit"
 
@@ -94,6 +95,7 @@ async def test_health_disables_capabilities_when_pg_is_unavailable(monkeypatch):
         "wechat_analytics_ingestion": False,
         "wechat_retrospective_topic_optimizer": False,
         "agent_self_evolution_foundation": False,
+        "novel_agent_books_chapters": False,
     }
 
 
