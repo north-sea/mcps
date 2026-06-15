@@ -4,6 +4,7 @@
 对应 migration 0007 的 7 个表。
 """
 
+import json
 import asyncpg
 
 
@@ -289,8 +290,8 @@ async def create_style_profile(
                 """,
                 book_slug,
                 new_version,
-                summary,
-                dimensions,
+                json.dumps(summary),
+                json.dumps(dimensions),
                 prompt_template,
             )
     return dict(row)
@@ -396,7 +397,7 @@ async def create_validation_report(
         RETURNING id, book_slug, is_valid, total_chapters, created_at
     """
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(sql, book_slug, is_valid, total_chapters, warnings, errors)
+        row = await conn.fetchrow(sql, book_slug, is_valid, total_chapters, json.dumps(warnings), json.dumps(errors))
     return dict(row)
 
 
@@ -418,7 +419,7 @@ async def create_analysis_run(
         RETURNING id, book_slug, stage, started_at, created_at
     """
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(sql, book_slug, stage, chapters_status, error)
+        row = await conn.fetchrow(sql, book_slug, stage, json.dumps(chapters_status), error)
     return dict(row)
 
 
@@ -443,7 +444,7 @@ async def update_analysis_run(
 
     if chapters_status is not None:
         updates.append(f"chapters_status = ${idx}")
-        params.append(chapters_status)
+        params.append(json.dumps(chapters_status))
         idx += 1
 
     if completed_at is not None:
