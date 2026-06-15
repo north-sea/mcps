@@ -122,6 +122,10 @@ class TestNovelSchemaHealthCheck:
             if "pg_constraint" in query:
                 return []  # 返回空约束列表
 
+            # 如果查询的是索引（pg_indexes）
+            if "pg_indexes" in query:
+                return []  # 返回空索引列表
+
             table_name = args[1] if len(args) > 1 else ""
 
             if table_name == "novel_chapters":
