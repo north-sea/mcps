@@ -80,12 +80,12 @@ User-visible outcome 判为 CONDITIONAL PASS 的原因：
 
 | Field | Value |
 |---|---|
-| Status | not_submitted |
-| Commit Hashes | 无 |
-| Commit Messages | 无 |
-| Included Files | 无 |
-| Excluded / Remaining Files | 11 个待提交文件（见 git status） |
-| Reason | 需生成 commit plan 并等待用户确认后提交 |
+| Status | ✅ committed |
+| Commit Hashes | a4cf8f2, fd3c8f8, 7ddb7bc, 8df2370, d725cec |
+| Commit Messages | Batch 1: feat(hermes-db): add novel planning tables migration<br>Batch 2: feat(hermes-db): implement batch planning API<br>Batch 3: test(hermes-db): add novel planning tests<br>Batch 4: docs(hermes-db): add batch planning API documentation<br>Batch 5: chore: update active feature to hermes-db-batch-planning-api |
+| Included Files | 18 个文件（1 migration + 4 实现文件 + 2 测试文件 + 1 集成测试指南 + 9 SDD 文档 + 1 README + 1 .active） |
+| Excluded / Remaining Files | 无 |
+| Reason | 已按 5 个 batch 顺序提交完成 |
 
 ---
 
@@ -97,7 +97,7 @@ User-visible outcome 判为 CONDITIONAL PASS 的原因：
 - **延后项**: 
   1. T017 端到端集成测试（需手动执行 `tests/integration_test_guide.md`）
   2. T018 跨仓库协调（需通知 agents 仓库 bookId→bookSlug 接口变更）
-  3. Migration 执行（部署前需运行 `alembic upgrade head`）
+  3. **⚠️ Migration 执行（部署前必须运行 `alembic upgrade head`）**
 - **退役结论**: 不适用（新功能）
-- **提交结论**: not_submitted（需生成 commit plan 并确认）
-- **后续动作**: 生成 commit plan → 用户确认 → 执行提交 → 集成测试 → 跨仓库协调
+- **提交结论**: ✅ committed（5 个 batches，commit hash: a4cf8f2, fd3c8f8, 7ddb7bc, 8df2370, d725cec）
+- **后续动作**: 部署前执行 migration → 集成测试 → 跨仓库协调
