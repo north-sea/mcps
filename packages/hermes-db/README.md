@@ -42,6 +42,10 @@ Hermes 领域级 DB MCP Server — 语义化数据访问工具。
 | `find_similar_inspirations` | 语义相似灵感检索 |
 | `list_inspirations` | 灵感列表 |
 | `get_inspiration` | 灵感详情 |
+| `batch_create_book_planning` | 批量创建书籍规划数据（4 表事务性写入：worldbuilding, characters, foreshadowing, volume_outlines） |
+| `get_chapter_input_pack` | 获取章纲生成输入包（批量读取：recent chapters, characters, foreshadowing, emotional debts, volume goal） |
+| `update_context_version` | 更新书籍上下文版本号并记录变更日志 |
+| `get_current_context_version` | 获取书籍当前上下文版本号 |
 
 ## 本地开发（stdio 模式）
 
