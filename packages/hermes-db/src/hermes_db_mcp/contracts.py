@@ -294,7 +294,13 @@ ERROR_CODES = {
     "invalid_filter": "查询过滤条件不合法",
     # wechat article ledger
     "conflict": "记录冲突",
+    # novel planning (T010)
+    "book_not_found": "书籍不存在",
+    "planning_already_exists": "书籍规划数据已存在",
+    "foreshadowing_limit_exceeded": "伏笔数量超过限制",
+    "transaction_failed": "事务执行失败",
 }
+
 
 
 # ============================================================================
