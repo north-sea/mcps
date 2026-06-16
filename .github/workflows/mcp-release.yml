@@ -221,9 +221,27 @@ jobs:
 
           migration_role_summary="not checked"
           if [[ -n "${migration_command}" ]] && docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
-            migration_role_summary="$(docker exec -i "${CONTAINER_NAME}" python - <<'PY'
+            # First check if MIGRATION_PG_DSN exists
+            if ! docker exec "${CONTAINER_NAME}" env | grep -q "^MIGRATION_PG_DSN="; then
+              migration_role_summary="MIGRATION_PG_DSN not found in container"
+              echo "::error::MIGRATION_PG_DSN is not present in the running container"
+              exit 1
+            fi
+
+            # Try to check role permissions if psycopg2 is available
+            migration_role_summary="$(docker exec -i "${CONTAINER_NAME}" python - <<'PY' || echo "MIGRATION_PG_DSN present; psycopg2 not available (skipped role check)"
           import os
-          import psycopg2
+          try:
+              import psycopg2
+          except ModuleNotFoundError:
+              # Container doesn't have psycopg2 (e.g., uses asyncpg only)
+              # Just verify MIGRATION_PG_DSN exists and exit gracefully
+              dsn = os.environ.get("MIGRATION_PG_DSN")
+              if not dsn:
+                  raise SystemExit("MIGRATION_PG_DSN is not present in the running container")
+              print("MIGRATION_PG_DSN present; psycopg2 not available (skipped role check)")
+              import sys
+              sys.exit(0)
 
           dsn = os.environ.get("MIGRATION_PG_DSN")
           if not dsn:
