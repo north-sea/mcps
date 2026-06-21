@@ -15,7 +15,13 @@
     "test": "turbo run test",
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "new-server": "node scripts/create-server.js"
+    "new-server": "node scripts/create-server.js",
+    "build:wechat-draft": "pnpm --filter @mcps/wechat-draft build",
+    "dev:wechat-draft": "pnpm --filter @mcps/wechat-draft dev",
+    "start:wechat-draft": "pnpm --filter @mcps/wechat-draft start",
+    "build:wechat-draft-adapter": "pnpm --filter @mcps/wechat-draft-adapter build",
+    "dev:wechat-draft-adapter": "pnpm --filter @mcps/wechat-draft-adapter dev",
+    "start:wechat-draft-adapter": "pnpm --filter @mcps/wechat-draft-adapter start"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

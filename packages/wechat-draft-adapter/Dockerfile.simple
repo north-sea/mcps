@@ -1,0 +1,30 @@
+# Simplified Dockerfile using npm only
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY tsconfig.json ./
+COPY src ./src
+
+# Build
+RUN npm run build
+
+# Run as non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+# Expose port
+EXPOSE 3000
+
+# Start server (use index.js instead of server.js)
+CMD ["node", "dist/index.js"]

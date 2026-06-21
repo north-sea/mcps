@@ -1,0 +1,71 @@
+# WeChat Draft MCP Configuration Example
+
+This file shows the expected structure for `config/accounts.yaml` (production) or inline config (MVP).
+
+## Account Configuration
+
+```yaml
+accounts:
+  - account_id: yueliang
+    display_name: 月亮
+    enabled: true
+    adapter_account_ref: yueliang
+    adapter_id: ali-wechat-egress
+    metadata:
+      operator_note: MVP account for WeChat draft testing
+
+adapters:
+  - adapter_id: ali-wechat-egress
+    base_url: http://100.x.x.x:3000  # Tailscale private endpoint
+    auth_ref: env:WECHAT_ADAPTER_AUTH_TOKEN
+    allowed_accounts:
+      - yueliang
+    egress_public_ip: <REDACTED_ECS_PUBLIC_IP>
+    network_path: tailscale  # or wireguard / ssh_tunnel / private_vpc
+    timeout_ms: 10000
+    capabilities:
+      - check_credentials
+      - draft_add
+      - draft_batchget
+    metadata:
+      deployment_note: Ali ECS, systemd service wechat-adapter
+      host_alias: ali
+
+credentials:
+  - account_id: yueliang
+    credential_location: ecs_adapter
+    adapter_account_ref: yueliang
+    appid_hint: wx...abc123
+    secret_source_hint: ECS environment variable
+    ip_whitelist_note: ECS egress IP configured in WeChat console
+
+hermes_db:
+  base_url: http://localhost:8787
+  timeout_ms: 10000
+```
+
+## Environment Variables
+
+MVP uses environment variables for sensitive configuration:
+
+```bash
+# ECS Adapter connection
+export WECHAT_ADAPTER_BASE_URL="http://100.x.x.x:3000"
+export WECHAT_ADAPTER_AUTH_TOKEN="<REDACTED>"
+export WECHAT_ADAPTER_NETWORK_PATH="tailscale"
+export WECHAT_ECS_EGRESS_IP="<REDACTED>"
+
+# Hermes-db connection
+export HERMES_DB_BASE_URL="http://localhost:8787"
+
+# Runtime path (optional)
+export WECHAT_DRAFT_RUNTIME_PATH="/var/run/wechat-draft"
+```
+
+## Security Notes
+
+- **Do not commit** raw AppSecret, AccessToken, or adapter auth tokens
+- Use `auth_ref` to reference environment variables or secret managers
+- Adapter base_url should be private network endpoint (Tailscale/WireGuard/SSH tunnel)
+- ECS egress IP must be configured in WeChat IP whitelist
+- NAS-side MCP never stores AppSecret directly

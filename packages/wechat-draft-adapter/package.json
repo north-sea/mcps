@@ -1,0 +1,35 @@
+{
+  "name": "@mcps/wechat-draft-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run watch",
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node ./dist/server.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "wechat",
+    "adapter"
+  ],
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "author": "",
+  "license": "MIT",
+  "description": "WeChat API Adapter - ECS-side HTTP service for WeChat draft API with token management and fixed egress IP",
+  "dependencies": {
+    "express": "^5.1.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^20.11.5",
+    "shx": "^0.3.4",
+    "typescript": "^5.3.3"
+  }
+}
