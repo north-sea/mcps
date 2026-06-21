@@ -74,7 +74,7 @@ User-visible outcome 为 CONDITIONAL PASS 是因为：
 | Item | Status | Evidence / Rationale | Next Step |
 |---|---|---|---|
 | 旧逻辑、旧路径、fallback 或临时兼容退役 | 不适用 | 本 feature 为全新 MCP，无旧逻辑需退役 | 无 |
-| 发布、提交、CI 或 follow-through | 延后 | ECS adapter 已部署并运行（Docker 容器 eda856f91e8c）；代码未提交到 git（M package.json, M pnpm-lock.yaml, M specs/.active, ?? packages/wechat-draft-adapter/, ?? packages/wechat-draft/, ?? specs/wechat-draft-mcp/） | 需生成 commit plan 并等待用户确认 |
+| 发布、提交、CI 或 follow-through | 已完成 | ECS adapter 已部署并运行（Docker 容器 eda856f91e8c）；代码已提交到 git（2 个 batch，commit hash: ad396ea + f0b2ca3，61 files changed, 7975 insertions, 17 deletions） | 无 |
 | 文档、阶段说明、模板或验收记录更新 | 已完成 | 已创建 docs/configuration.md, docs/runbook.md, docs/error-handling.md, docs/api-risk-control.md, docs/wechat-ready-artifact-example.md, DEPLOYMENT.md, MVP-COMPLETION-SUMMARY.md, acceptance.md（本文件） | 无 |
 | ADR、架构债或演进触发信号 | 已完成 | HermesDbClient MCP 集成点标注为 TODO（优先使用 MCP client 调用 hermes-db MCP，而非直接访问数据库）；MVP-COMPLETION-SUMMARY.md 记录 Phase 2 增强方向（素材上传、多账号、批量操作、监控告警） | Phase 2 feature 可选跟进 |
 | Knowledge Capture | 已完成 | 见下方 Knowledge Capture 表格 | 无 |
@@ -103,12 +103,12 @@ User-visible outcome 为 CONDITIONAL PASS 是因为：
 
 | Field | Value |
 |---|---|
-| Status | not_submitted |
-| Commit Hashes | 无 |
-| Commit Messages | 无 |
-| Included Files | 待生成 commit plan |
-| Excluded / Remaining Files | M package.json, M pnpm-lock.yaml, M specs/.active, ?? packages/wechat-draft-adapter/, ?? packages/wechat-draft/, ?? specs/wechat-draft-mcp/ |
-| Reason | 需生成 commit plan 并等待用户确认 |
+| Status | committed |
+| Commit Hashes | ad396ea (docs), f0b2ca3 (feat) |
+| Commit Messages | Batch 1: `docs(wechat-draft): complete SDD documentation`<br>Batch 2: `feat(wechat-draft): implement WeChat draft MCP with ECS adapter` |
+| Included Files | Batch 1: specs/.active + 10 个 specs/wechat-draft-mcp/*.md (12 files, +2544 insertions, -1 deletion)<br>Batch 2: package.json + pnpm-lock.yaml + packages/wechat-draft + packages/wechat-draft-adapter (49 files, +5431 insertions, -16 deletions) |
+| Excluded / Remaining Files | 无（工作树干净） |
+| Reason | 用户确认后成功提交 2 个 batch |
 
 ---
 
@@ -118,10 +118,9 @@ User-visible outcome 为 CONDITIONAL PASS 是因为：
 - **完成依据**: Evidence Table 所有 P0/P1 requirement PASS；三层架构验证通过（ECS adapter 部署成功、token 验证通过、NAS-ECS 连通性验证通过）；状态机、错误分类、幂等性、JSONL 存储、安全边界、文档体系完整。User-visible outcome 为 CONDITIONAL PASS 因为完整 end-to-end draft 创建需要真实 publish-ready artifact（属于运行时验证，非部署验证）。
 - **阻塞项**: 无
 - **延后项**: 
-  - 代码提交（需生成 commit plan 并等待用户确认）
   - HermesDbClient MCP 集成实现（标注为 TODO，Phase 2 可选）
   - 素材上传 adapter endpoint（Out of Scope，Phase 2 可选）
   - 完整 end-to-end draft 创建真实测试（需要真实 publish-ready artifact，属于运行时验证）
 - **退役结论**: 不适用（全新 MCP，无旧逻辑）
-- **提交结论**: not_submitted（需生成 commit plan）
-- **后续动作**: 生成 commit plan 并等待用户确认；若用户选择暂不提交，feature 已可投入使用（MCP 和 ECS adapter 均已部署）
+- **提交结论**: committed（2 个 batch，commit hash: ad396ea + f0b2ca3）
+- **后续动作**: Feature 已完成并提交，可投入使用；Phase 2 增强可选跟进
