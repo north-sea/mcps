@@ -71,8 +71,9 @@ export class ConfigLoader {
       adapters,
       credentials,
       hermes_db: {
-        base_url: process.env.HERMES_DB_BASE_URL || 'http://localhost:8787',
-        timeout_ms: 10000,
+        base_url: process.env.HERMES_DB_BASE_URL || 'http://nas.local:8765',
+        timeout_ms: parseInt(process.env.HERMES_DB_TIMEOUT_MS || '10000', 10),
+        auth_token: process.env.HERMES_DB_AUTH_TOKEN,
       },
       runtime_path: process.env.WECHAT_DRAFT_RUNTIME_PATH,
     };

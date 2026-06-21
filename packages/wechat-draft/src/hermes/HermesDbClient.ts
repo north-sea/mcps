@@ -2,7 +2,7 @@
  * Hermes-db Client
  *
  * Provides read access to workflow_artifacts and write access to wechat_articles ledger.
- * MVP uses hermes-db MCP tools; production may use direct HTTP client.
+ * Connects to hermes-db MCP server via HTTP (FastAPI backend at nas.local:8765).
  */
 
 import { ErrorCode, createErrorResult, ErrorResult } from '../schemas/index.js';
@@ -60,10 +60,69 @@ export interface ArticleLedgerUpdate {
 export class HermesDbClient {
   private baseUrl: string;
   private timeoutMs: number;
+  private authToken?: string;
 
-  constructor(baseUrl: string, timeoutMs: number = 10000) {
+  constructor(baseUrl: string, timeoutMs: number = 10000, authToken?: string) {
     this.baseUrl = baseUrl;
     this.timeoutMs = timeoutMs;
+    this.authToken = authToken;
+  }
+
+  /**
+   * Call hermes-db MCP tool via HTTP POST.
+   */
+  private async callTool<T = any>(
+    toolName: string,
+    args: Record<string, any>
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this.authToken) {
+        headers['Authorization'] = `Bearer ${this.authToken}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/mcp/tools/call`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: toolName,
+          arguments: args,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(
+          `HTTP ${response.status}: ${response.statusText} - ${errorText}`
+        );
+      }
+
+      const result = await response.json();
+
+      // Check if result contains error
+      if ((result as any)?.error) {
+        throw new Error(`Tool error: ${(result as any).error.message || JSON.stringify((result as any).error)}`);
+      }
+
+      return (result as any)?.content?.[0]?.text ? JSON.parse((result as any).content[0].text) : result;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Hermes-db request timeout after ${this.timeoutMs}ms`);
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -72,10 +131,18 @@ export class HermesDbClient {
    */
   async getArtifact(artifactId: string): Promise<WorkflowArtifact | null> {
     try {
-      // TODO: Phase 2 - implement via hermes-db MCP or HTTP client
-      // For now, return null (not found)
-      return null;
+      const result = await this.callTool<{ artifact: WorkflowArtifact | null }>(
+        'mcp__hermes-db__get_workflow_artifact_content',
+        { artifact_id: artifactId }
+      );
+
+      return result?.artifact || null;
     } catch (error) {
+      // If artifact not found, return null instead of throwing
+      if (error instanceof Error && error.message.includes('not found')) {
+        return null;
+      }
+
       throw new Error(
         `Failed to get artifact ${artifactId}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -88,27 +155,26 @@ export class HermesDbClient {
    */
   async upsertArticleLedger(update: ArticleLedgerUpdate): Promise<void> {
     try {
-      // TODO: Phase 4 - implement via hermes-db MCP upsert_wechat_article
-      // For MVP, we need to call the MCP tool via SDK or HTTP
-      // Since we're in an MCP server, we can't directly call another MCP server's tool
-      // Options:
-      // 1. Use HTTP client to call hermes-db HTTP API (if exists)
-      // 2. Use hermes-db MCP client (requires MCP client SDK)
-      // 3. Direct database access (requires pg connection)
-      //
-      // For T017 MVP, we'll throw a descriptive error indicating the integration point
-      // The actual implementation depends on the deployment architecture decision
-
-      throw new Error(
-        `Article ledger upsert requires hermes-db integration. ` +
-        `Options: (1) HTTP API to hermes-db, (2) MCP client to hermes-db MCP, (3) Direct pg connection. ` +
-        `Current update: account=${update.account}, run_id=${update.run_id}, status=${update.status}, ` +
-        `draft_artifact_id=${update.draft_artifact_id}, media_id=${(update.metadata as any)?.wechat_media_id}`
+      await this.callTool(
+        'mcp__hermes-db__upsert_wechat_article',
+        {
+          publication_idempotency_key: update.publication_idempotency_key,
+          account: update.account,
+          run_id: update.run_id,
+          status: update.status,
+          draft_artifact_id: update.draft_artifact_id,
+          title: update.title,
+          metadata: update.metadata,
+        }
       );
     } catch (error) {
-      throw new Error(
-        `Failed to upsert article ledger: ${error instanceof Error ? error.message : 'Unknown error'}`
+      // Log warning but don't throw - ledger update failure should not block draft creation
+      console.warn(
+        `[HermesDbClient] Failed to upsert article ledger: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Update: account=${update.account}, run_id=${update.run_id}, status=${update.status}`
       );
+      // Rethrow so caller can decide whether to continue
+      throw error;
     }
   }
 
@@ -117,9 +183,13 @@ export class HermesDbClient {
    */
   async health(): Promise<{ ok: boolean; error?: string }> {
     try {
-      // TODO: Phase 2 - implement via hermes-db MCP health tool
-      // For now, return placeholder
-      return { ok: false, error: 'Health check not yet implemented (Phase 2: T008)' };
+      const result = await this.callTool<{ status?: string; ok?: boolean }>(
+        'mcp__hermes-db__health',
+        {}
+      );
+
+      const isOk = result?.ok === true || result?.status === 'ok' || result?.status === 'healthy';
+      return { ok: isOk };
     } catch (error) {
       return {
         ok: false,

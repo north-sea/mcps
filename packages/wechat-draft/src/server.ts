@@ -26,7 +26,11 @@ export function createServer(): McpServer {
 
   const configLoader = new ConfigLoader();
   const config = configLoader.load();
-  const hermesDbClient = new HermesDbClient(config.hermes_db.base_url, config.hermes_db.timeout_ms);
+  const hermesDbClient = new HermesDbClient(
+    config.hermes_db.base_url,
+    config.hermes_db.timeout_ms,
+    config.hermes_db.auth_token
+  );
   const artifactValidator = new ArtifactValidator();
   const jobStore = new JobStore({ runtimePath: config.runtime_path });
 

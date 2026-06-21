@@ -40,6 +40,7 @@ export interface EcsWechatAdapterConfig {
 export interface HermesDbConfig {
   base_url: string;
   timeout_ms: number;
+  auth_token?: string;
 }
 
 export interface ServiceConfig {
