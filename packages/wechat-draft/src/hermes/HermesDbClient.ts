@@ -81,18 +81,24 @@ export class HermesDbClient {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       };
 
       if (this.authToken) {
         headers['Authorization'] = `Bearer ${this.authToken}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/mcp/tools/call`, {
+      const response = await fetch(`${this.baseUrl}/mcp`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          name: toolName,
-          arguments: args,
+          jsonrpc: '2.0',
+          id: Date.now(),
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: args,
+          },
         }),
         signal: controller.signal,
       });
@@ -108,12 +114,18 @@ export class HermesDbClient {
 
       const result = await response.json();
 
-      // Check if result contains error
+      // Check JSON-RPC error
       if ((result as any)?.error) {
-        throw new Error(`Tool error: ${(result as any).error.message || JSON.stringify((result as any).error)}`);
+        throw new Error(`JSON-RPC error: ${(result as any).error.message || JSON.stringify((result as any).error)}`);
       }
 
-      return (result as any)?.content?.[0]?.text ? JSON.parse((result as any).content[0].text) : result;
+      // Extract content from JSON-RPC result
+      const content = (result as any)?.result?.content;
+      if (content && Array.isArray(content) && content[0]?.text) {
+        return JSON.parse(content[0].text) as T;
+      }
+
+      return result as T;
     } catch (error) {
       clearTimeout(timeoutId);
 
@@ -131,15 +143,23 @@ export class HermesDbClient {
    */
   async getArtifact(artifactId: string): Promise<WorkflowArtifact | null> {
     try {
-      const result = await this.callTool<{ artifact: WorkflowArtifact | null }>(
-        'mcp__hermes-db__get_workflow_artifact_content',
+      const result = await this.callTool<WorkflowArtifact | { error?: string; message?: string }>(
+        'get_workflow_artifact_content',
         { artifact_id: artifactId }
       );
 
-      return result?.artifact || null;
+      // Check if result is an error response
+      if (result && typeof result === 'object' && 'error' in result) {
+        if ((result as any).error === 'not_found') {
+          return null;
+        }
+        throw new Error((result as any).message || 'Unknown error from hermes-db');
+      }
+
+      return result as WorkflowArtifact || null;
     } catch (error) {
       // If artifact not found, return null instead of throwing
-      if (error instanceof Error && error.message.includes('not found')) {
+      if (error instanceof Error && (error.message.includes('not found') || error.message.includes('does not exist') || error.message.includes('不存在'))) {
         return null;
       }
 
@@ -156,7 +176,7 @@ export class HermesDbClient {
   async upsertArticleLedger(update: ArticleLedgerUpdate): Promise<void> {
     try {
       await this.callTool(
-        'mcp__hermes-db__upsert_wechat_article',
+        'upsert_wechat_article',
         {
           publication_idempotency_key: update.publication_idempotency_key,
           account: update.account,
@@ -183,12 +203,12 @@ export class HermesDbClient {
    */
   async health(): Promise<{ ok: boolean; error?: string }> {
     try {
-      const result = await this.callTool<{ status?: string; ok?: boolean }>(
-        'mcp__hermes-db__health',
+      const result = await this.callTool<{ pg?: string; redis?: string; embedding?: string }>(
+        'health',
         {}
       );
 
-      const isOk = result?.ok === true || result?.status === 'ok' || result?.status === 'healthy';
+      const isOk = result?.pg === 'ok' && result?.redis === 'ok';
       return { ok: isOk };
     } catch (error) {
       return {
