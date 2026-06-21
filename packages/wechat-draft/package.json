@@ -26,6 +26,7 @@
   "description": "WeChat Draft MCP Server - Create WeChat drafts from hermes-db artifacts via ECS adapter",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.1",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "zod": "^3.24.2"
   },
