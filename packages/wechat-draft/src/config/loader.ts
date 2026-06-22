@@ -35,7 +35,7 @@ export class ConfigLoader {
         egress_public_ip: process.env.WECHAT_ECS_EGRESS_IP || '<REDACTED>',
         network_path: (process.env.WECHAT_ADAPTER_NETWORK_PATH as any) || 'tailscale',
         timeout_ms: 10000,
-        capabilities: ['check_credentials', 'draft_add', 'draft_batchget'],
+        capabilities: ['check_credentials', 'draft_add', 'draft_batchget', 'asset_upload'],
         metadata: {
           deployment_note: 'Ali ECS, systemd service wechat-adapter',
         },

@@ -5,15 +5,17 @@
  * - GET /health - Health check
  * - POST /accounts/:account/check-credentials - AccessToken dry-run
  * - POST /accounts/:account/drafts - Create draft
+ * - POST /accounts/:account/assets - Upload image asset
  *
  * Authentication: Bearer token (from env ADAPTER_AUTH_TOKEN)
  * Network: Private endpoint only (Tailscale/WireGuard/SSH tunnel)
  */
 
 import express, { Request, Response, NextFunction, Express } from 'express';
+import multer from 'multer';
 import { TokenManager, TokenError } from './wechat/TokenManager.js';
 import { WeChatApiClient, WeChatApiError } from './wechat/WeChatApiClient.js';
-import { AccountCredential, DraftAddRequest } from './types/wechat.js';
+import { AccountCredential, DraftAddRequest, UploadAssetUsage } from './types/wechat.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const ADAPTER_AUTH_TOKEN = process.env.ADAPTER_AUTH_TOKEN;
@@ -99,7 +101,7 @@ export function createServer(): Express {
   app.get('/health', (req, res) => {
     res.json({
       status: 'ok',
-      capabilities: ['check_credentials', 'draft_add'],
+      capabilities: ['check_credentials', 'draft_add', 'asset_upload'],
       allowed_accounts: ALLOWED_ACCOUNTS,
     });
   });
@@ -192,6 +194,88 @@ export function createServer(): Express {
       });
     }
   });
+
+  // Upload asset (image for body or cover)
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
+
+  app.post(
+    '/accounts/:account/assets',
+    authMiddleware,
+    validateAccount,
+    upload.single('media'),
+    async (req, res) => {
+      const account = Array.isArray(req.params.account) ? req.params.account[0] : req.params.account;
+      const usage = req.body.usage as UploadAssetUsage | undefined;
+      const file = req.file;
+
+      // Validate request
+      if (!usage || (usage !== 'body_image' && usage !== 'cover_image')) {
+        res.status(400).json({
+          success: false,
+          error: 'invalid_request',
+          message: 'Missing or invalid usage field (must be body_image or cover_image)',
+        });
+        return;
+      }
+
+      if (!file) {
+        res.status(400).json({
+          success: false,
+          error: 'invalid_request',
+          message: 'Missing media file',
+        });
+        return;
+      }
+
+      try {
+        if (usage === 'body_image') {
+          const response = await apiClient.uploadBodyImage(account, file.buffer, file.originalname);
+          res.json({
+            success: true,
+            account,
+            usage: 'body_image',
+            wechat_url: response.url,
+          });
+        } else if (usage === 'cover_image') {
+          const response = await apiClient.uploadCoverImage(account, file.buffer, file.originalname);
+          res.json({
+            success: true,
+            account,
+            usage: 'cover_image',
+            thumb_media_id: response.media_id,
+          });
+        }
+      } catch (error) {
+        if (error instanceof WeChatApiError) {
+          res.status(400).json({
+            success: false,
+            error: 'wechat_api_error',
+            errcode: error.errcode,
+            errmsg: error.errmsg,
+            account,
+          });
+          return;
+        }
+
+        if (error instanceof TokenError) {
+          res.status(400).json({
+            success: false,
+            error: 'token_error',
+            errcode: error.errcode,
+            errmsg: error.errmsg,
+            account,
+          });
+          return;
+        }
+
+        res.status(500).json({
+          success: false,
+          error: 'internal_error',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  );
 
   // 404 handler
   app.use((req, res) => {

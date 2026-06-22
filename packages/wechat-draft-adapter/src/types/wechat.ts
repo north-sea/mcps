@@ -44,3 +44,14 @@ export interface AccountCredential {
   appid: string;
   appsecret: string;
 }
+
+export type UploadAssetUsage = 'body_image' | 'cover_image';
+
+export interface UploadImageResponse {
+  url: string;
+}
+
+export interface AddMaterialResponse {
+  media_id: string;
+  url?: string;
+}

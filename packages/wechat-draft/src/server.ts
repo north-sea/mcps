@@ -3,6 +3,8 @@ import { ConfigLoader } from "./config/index.js";
 import { HermesDbClient, ArtifactValidator } from "./hermes/index.js";
 import { JobStore } from "./store/index.js";
 import { DraftWorkflow } from "./workflow/index.js";
+import { AssetSourceLoader } from "./wechat/AssetSourceLoader.js";
+import { WechatAdapterClient } from "./wechat/WechatAdapterClient.js";
 import {
   ListAccountsInputSchema,
   ListAccountsOutput,
@@ -11,6 +13,8 @@ import {
   CreateDraftInputSchema,
   CreateDraftOutput,
   GetDraftStatusOutput,
+  UploadAssetInputSchema,
+  UploadAssetOutput,
   JobIdSchema,
   ArtifactIdSchema,
   ErrorCode,
@@ -382,6 +386,195 @@ export function createServer(): McpServer {
               text: JSON.stringify(errorResult, null, 2),
             },
           ],
+        };
+      }
+    }
+  );
+
+  // ==========================================================================
+  // Tool: wechat_upload_asset (side-effecting)
+  // ==========================================================================
+  server.tool(
+    "wechat_upload_asset",
+    "Upload image asset to WeChat material API. Supports body_image (returns wechat_url for inline content) and cover_image (returns thumb_media_id for draft cover). This is a side-effecting operation that uploads to WeChat's material system.",
+    {
+      account: UploadAssetInputSchema.shape.account,
+      usage: UploadAssetInputSchema.shape.usage,
+      source_type: UploadAssetInputSchema.shape.source_type,
+      source: UploadAssetInputSchema.shape.source,
+      filename: UploadAssetInputSchema.shape.filename,
+      mime_type: UploadAssetInputSchema.shape.mime_type,
+    },
+    async ({ account, usage, source_type, source, filename, mime_type }) => {
+      try {
+        // Check account
+        const accountConfig = configLoader.getAccount(account);
+        if (!accountConfig) {
+          const errorResult = createErrorResult(
+            ErrorCode.ACCOUNT_NOT_FOUND,
+            `Account "${account}" not found`
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(errorResult, null, 2),
+              },
+            ],
+          };
+        }
+
+        if (!accountConfig.enabled) {
+          const errorResult = createErrorResult(
+            ErrorCode.ACCOUNT_DISABLED,
+            `Account "${account}" is disabled`
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(errorResult, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Get adapter config
+        const adapterConfig = configLoader.getAdapter(accountConfig.adapter_id);
+        if (!adapterConfig) {
+          const errorResult = createErrorResult(
+            ErrorCode.ADAPTER_NOT_FOUND,
+            `Adapter "${accountConfig.adapter_id}" not found`
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(errorResult, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Check adapter capability
+        if (!adapterConfig.capabilities.includes('asset_upload')) {
+          const errorResult = createErrorResult(
+            ErrorCode.ADAPTER_CAPABILITY_MISSING,
+            `Adapter "${accountConfig.adapter_id}" does not support asset_upload capability`
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(errorResult, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Load asset source (local_path or remote_url)
+        const assetLoader = new AssetSourceLoader();
+        const loadedAsset = await assetLoader.load({
+          usage,
+          source_type,
+          source,
+          filename,
+          mime_type,
+        });
+
+        // Upload to adapter
+        const adapterClient = new WechatAdapterClient(adapterConfig);
+        const uploadResponse = await adapterClient.uploadAsset(account, {
+          usage,
+          bytes: loadedAsset.bytes,
+          filename: loadedAsset.filename,
+          mimeType: loadedAsset.mimeType,
+        });
+
+        // Build response
+        const result: UploadAssetOutput = {
+          account,
+          usage,
+          source_type,
+          filename: loadedAsset.filename,
+          mime_type: loadedAsset.mimeType,
+          size_bytes: loadedAsset.sizeBytes,
+          wechat_url: uploadResponse.wechat_url,
+          thumb_media_id: uploadResponse.thumb_media_id,
+          created_at: new Date().toISOString(),
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(createSuccessResult(result), null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        // Map AssetSourceError to specific error codes
+        if (error && typeof error === 'object' && 'code' in error && 'name' in error) {
+          const typedError = error as any;
+
+          // AssetSourceError - already has correct error codes
+          if (typedError.name === 'AssetSourceError') {
+            const errorResult = createErrorResult(
+              typedError.code,
+              typedError.message,
+              typedError.details
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(errorResult, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          // AdapterError subclasses
+          if (typedError.name?.startsWith('Adapter')) {
+            // Map adapter error codes to MCP error codes
+            let errorCode = typedError.code;
+
+            // Map adapter_endpoint_not_found to capability_missing for asset upload
+            if (typedError.code === 'adapter_endpoint_not_found') {
+              errorCode = ErrorCode.ADAPTER_CAPABILITY_MISSING;
+            }
+
+            const errorResult = createErrorResult(
+              errorCode,
+              typedError.message,
+              // Filter out sensitive details (don't include auth tokens, full URLs, etc.)
+              typedError.details ? { account: typedError.details.account } : undefined
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(errorResult, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+
+        const errorResult = createErrorResult(
+          ErrorCode.INTERNAL_ERROR,
+          error instanceof Error ? error.message : "Unknown error"
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(errorResult, null, 2),
+            },
+          ],
+          isError: true,
         };
       }
     }
