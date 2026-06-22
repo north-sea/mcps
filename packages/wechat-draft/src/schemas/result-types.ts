@@ -82,6 +82,13 @@ export const ErrorCode = {
   WECHAT_ASSET_INVALID: 'wechat_asset_invalid',
   WECHAT_API_ERROR: 'wechat_api_error',
 
+  // Asset upload specific errors
+  ASSET_SOURCE_INVALID: 'asset_source_invalid',
+  ASSET_FILE_NOT_READABLE: 'asset_file_not_readable',
+  ASSET_REMOTE_URL_FETCH_FAILED: 'asset_remote_url_fetch_failed',
+  ASSET_SIZE_EXCEEDED: 'asset_size_exceeded',
+  ASSET_FORMAT_UNSUPPORTED: 'asset_format_unsupported',
+
   // Job errors
   JOB_NOT_FOUND: 'job_not_found',
   JOB_ALREADY_EXISTS: 'job_already_exists',

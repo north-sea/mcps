@@ -6,6 +6,7 @@
  * - wechat_validate_publish_artifact: read-only, validate artifact before creating draft
  * - wechat_create_draft: side-effecting, create WeChat draft from hermes-db artifact
  * - wechat_get_draft_status: read-only, query draft job status
+ * - wechat_upload_asset: side-effecting, upload image asset to WeChat (body image or cover thumbnail)
  *
  * Out of scope for MVP:
  * - publish/mass-send/update/delete tools
@@ -156,6 +157,62 @@ export const GetDraftStatusOutputSchema = z.object({
 
 export type GetDraftStatusInput = z.infer<typeof GetDraftStatusInputSchema>;
 export type GetDraftStatusOutput = z.infer<typeof GetDraftStatusOutputSchema>;
+
+// ============================================================================
+// Tool: wechat_upload_asset
+// ============================================================================
+
+/**
+ * Image usage. Drives which WeChat material API the adapter calls and which
+ * core reference field the result carries:
+ * - body_image  -> /cgi-bin/media/uploadimg -> wechat_url
+ * - cover_image -> /cgi-bin/material/add_material?type=thumb -> thumb_media_id
+ */
+export const AssetUsageSchema = z.enum(['body_image', 'cover_image'])
+  .describe('Image usage: body_image returns an inline content URL, cover_image returns a permanent thumb media_id');
+
+/**
+ * Image source kind. base64 is intentionally excluded from MVP.
+ */
+export const AssetSourceTypeSchema = z.enum(['local_path', 'remote_url'])
+  .describe('Image source kind: local_path reads a file from the MCP runtime, remote_url fetches over http(s)');
+
+export const UploadAssetInputSchema = z.object({
+  account: AccountIdSchema,
+  usage: AssetUsageSchema,
+  source_type: AssetSourceTypeSchema,
+  source: z.string()
+    .min(1)
+    .describe('Local file path (source_type=local_path) or http(s) image URL (source_type=remote_url)'),
+  filename: z.string()
+    .min(1)
+    .optional()
+    .describe('Optional original filename, used for mime/extension inference'),
+  mime_type: z.string()
+    .min(1)
+    .optional()
+    .describe('Optional explicit mime type, e.g. "image/jpeg"'),
+});
+
+export const UploadAssetOutputSchema = z.object({
+  account: z.string(),
+  usage: AssetUsageSchema,
+  source_type: AssetSourceTypeSchema,
+  filename: z.string().optional(),
+  mime_type: z.string().optional(),
+  size_bytes: z.number().int().nonnegative().optional(),
+  // Exactly one of the following is populated, selected by `usage`:
+  wechat_url: z.string().optional()
+    .describe('Inline content image URL (usage=body_image)'),
+  thumb_media_id: z.string().optional()
+    .describe('Permanent thumbnail material id (usage=cover_image)'),
+  created_at: z.string(),
+});
+
+export type UploadAssetInput = z.infer<typeof UploadAssetInputSchema>;
+export type UploadAssetOutput = z.infer<typeof UploadAssetOutputSchema>;
+export type AssetUsage = z.infer<typeof AssetUsageSchema>;
+export type AssetSourceType = z.infer<typeof AssetSourceTypeSchema>;
 
 // ============================================================================
 // Result Types (Internal)

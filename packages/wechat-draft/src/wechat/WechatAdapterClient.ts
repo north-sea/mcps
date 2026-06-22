@@ -37,6 +37,17 @@ export interface AdapterCreateDraftResponse {
   errmsg?: string;
 }
 
+export interface AdapterUploadAssetResponse {
+  success: boolean;
+  account?: string;
+  usage?: 'body_image' | 'cover_image';
+  wechat_url?: string;        // body_image result
+  thumb_media_id?: string;    // cover_image result
+  error?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
 // ============================================================================
 // Error Types
 // ============================================================================
@@ -225,6 +236,61 @@ export class WechatAdapterClient {
   }
 
   /**
+   * Upload asset - call adapter to upload image to WeChat material API.
+   * Sends multipart/form-data with file bytes.
+   */
+  async uploadAsset(
+    account: string,
+    request: {
+      usage: 'body_image' | 'cover_image';
+      bytes: Uint8Array;
+      filename: string;
+      mimeType: string;
+    }
+  ): Promise<AdapterUploadAssetResponse> {
+    const url = `${this.baseUrl}/accounts/${encodeURIComponent(account)}/assets`;
+
+    // Build FormData
+    const formData = new FormData();
+    formData.append('usage', request.usage);
+
+    // Create Blob from bytes and append as file
+    const blob = new Blob([request.bytes], { type: request.mimeType });
+    formData.append('media', blob, request.filename);
+
+    // Optional: add filename and mime_type as separate fields if needed
+    formData.append('filename', request.filename);
+    formData.append('mime_type', request.mimeType);
+
+    const response = await this.fetch<AdapterUploadAssetResponse>(url, {
+      method: 'POST',
+      requireAuth: true,
+      customBody: formData,
+    });
+
+    // Check for errors
+    if (!response.success) {
+      // Token error
+      if (response.error === 'token_error' && response.errcode && response.errmsg) {
+        throw new AdapterTokenError(account, response.errcode, response.errmsg);
+      }
+
+      // WeChat API error (asset-specific: 40005, 40009, etc.)
+      if (response.error === 'wechat_api_error' && response.errcode && response.errmsg) {
+        throw new AdapterWeChatApiError(account, response.errcode, response.errmsg);
+      }
+
+      // Other adapter error
+      throw new AdapterInternalError(
+        response.error || 'Asset upload failed',
+        { account, usage: request.usage, response }
+      );
+    }
+
+    return response;
+  }
+
+  /**
    * Generic fetch with timeout, auth, and error handling.
    */
   private async fetch<T>(
@@ -233,15 +299,19 @@ export class WechatAdapterClient {
       method: 'GET' | 'POST';
       requireAuth: boolean;
       body?: unknown;
+      customBody?: FormData;
     }
   ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
+      const headers: Record<string, string> = {};
+
+      // Only set Content-Type for JSON body; FormData sets its own
+      if (!options.customBody) {
+        headers['Content-Type'] = 'application/json';
+      }
 
       if (options.requireAuth) {
         headers['Authorization'] = `Bearer ${this.authToken}`;
@@ -250,7 +320,11 @@ export class WechatAdapterClient {
       const response = await fetch(url, {
         method: options.method,
         headers,
-        body: options.body ? JSON.stringify(options.body) : undefined,
+        body: options.customBody
+          ? options.customBody
+          : options.body
+            ? JSON.stringify(options.body)
+            : undefined,
         signal: controller.signal,
       });
 
