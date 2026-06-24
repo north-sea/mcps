@@ -160,6 +160,6 @@ export class DraftPayloadBuilder {
    * Check if URL is a valid WeChat image URL.
    */
   private isWechatImageUrl(url: string): boolean {
-    return url.startsWith('https://mmbiz.qpic.cn/');
+    return url.startsWith('https://mmbiz.qpic.cn/') || url.startsWith('http://mmbiz.qpic.cn/');
   }
 }

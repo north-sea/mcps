@@ -29,6 +29,31 @@ export interface DraftAddResponse {
   media_id: string;
 }
 
+export interface DraftBatchGetRequest {
+  offset?: number;
+  count?: number;
+  no_content?: 0 | 1;
+}
+
+export interface DraftBatchGetResponse {
+  total_count?: number;
+  item_count?: number;
+  item?: Array<{
+    media_id: string;
+    content?: {
+      news_item?: Array<{
+        title?: string;
+        author?: string;
+        digest?: string;
+        content?: string;
+        content_source_url?: string;
+        thumb_media_id?: string;
+      }>;
+    };
+    update_time?: number;
+  }>;
+}
+
 export interface WechatApiError {
   errcode: number;
   errmsg: string;

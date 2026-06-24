@@ -30,6 +30,9 @@ This document provides a complete example of a `workflow_artifacts` entry that p
     },
     "style_profile_id": "yueliang.default",
     "style_version": "2026-06-21",
+    "schema_version": "wechat_api_article.v1",
+    "source_article_document_artifact_id": "artifact_20260624_article_document_001",
+    "source_article_document_schema_version": "article_document.tiptap.v1",
     "wechat_asset_manifest": {
       "ready": true,
       "body_images": [
@@ -46,6 +49,7 @@ This document provides a complete example of a `workflow_artifacts` entry that p
       "asset_warnings": []
     },
     "source_markdown_artifact_id": "artifact_20260621_markdown_001",
+    "parent_artifact_id": "artifact_20260624_article_document_001",
     "format": "wechat_api_article"
   },
   "created_at": "2026-06-21T10:00:00Z",
@@ -181,19 +185,20 @@ The WeChat-ready artifact contract assumes upstream asset preparation:
 
 ```text
 1. Writing Agent / Style Skill
-   - Generate Markdown article
-   - Apply account style
+   - Generate canonical article_document JSON
+   - Optionally import legacy Markdown into article_document
 
 2. Asset Preparation Flow (Separate from Draft MCP)
    - Upload body images via WeChat API: POST /cgi-bin/media/uploadimg
    - Upload cover image via WeChat API: POST /cgi-bin/material/add_material?type=thumb
-   - Replace Markdown image refs with WeChat URLs
+   - Resolve article_document image asset_ref values to WeChat URLs
    - Render final HTML with WeChat image URLs
 
 3. Save to hermes-db
    - stage: publish_ready
    - type: wechat_api_article
    - metadata.wechat_asset_manifest.ready: true
+   - metadata.source_article_document_artifact_id: source canonical artifact
 
 4. WeChat Draft MCP
    - Validate artifact via wechat_validate_publish_artifact
@@ -205,8 +210,9 @@ The WeChat-ready artifact contract assumes upstream asset preparation:
 - ✅ MCP validates artifact is WeChat-ready
 - ✅ MCP rejects non-WeChat image URLs
 - ✅ MCP rejects missing cover thumb_media_id
+- ✅ MCP rejects `article_document` as a direct draft input
 - ❌ MCP does NOT upload images
 - ❌ MCP does NOT normalize assets
-- ❌ MCP does NOT render content
+- ❌ MCP does NOT render `article_document`
 
-Image upload and asset normalization are handled by upstream workflows.
+Image upload, asset normalization, and canonical `article_document` rendering are handled by upstream workflows.

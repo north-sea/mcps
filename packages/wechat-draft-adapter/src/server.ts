@@ -5,6 +5,7 @@
  * - GET /health - Health check
  * - POST /accounts/:account/check-credentials - AccessToken dry-run
  * - POST /accounts/:account/drafts - Create draft
+ * - POST /accounts/:account/drafts/batchget - Read draft list
  * - POST /accounts/:account/assets - Upload image asset
  *
  * Authentication: Bearer token (from env ADAPTER_AUTH_TOKEN)
@@ -15,11 +16,11 @@ import express, { Request, Response, NextFunction, Express } from 'express';
 import multer from 'multer';
 import { TokenManager, TokenError } from './wechat/TokenManager.js';
 import { WeChatApiClient, WeChatApiError } from './wechat/WeChatApiClient.js';
-import { AccountCredential, DraftAddRequest, UploadAssetUsage } from './types/wechat.js';
+import { AccountCredential, DraftAddRequest, DraftBatchGetRequest, UploadAssetUsage } from './types/wechat.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const ADAPTER_AUTH_TOKEN = process.env.ADAPTER_AUTH_TOKEN;
-const ALLOWED_ACCOUNTS = (process.env.ALLOWED_ACCOUNTS || 'yueliang').split(',');
+const ALLOWED_ACCOUNTS = (process.env.ALLOWED_ACCOUNTS || 'weiyuchengchun,yueliang').split(',');
 
 // ============================================================================
 // Server Setup
@@ -101,7 +102,7 @@ export function createServer(): Express {
   app.get('/health', (req, res) => {
     res.json({
       status: 'ok',
-      capabilities: ['check_credentials', 'draft_add', 'asset_upload'],
+      capabilities: ['check_credentials', 'draft_add', 'draft_batchget', 'asset_upload'],
       allowed_accounts: ALLOWED_ACCOUNTS,
     });
   });
@@ -195,6 +196,54 @@ export function createServer(): Express {
     }
   });
 
+  // Batch get drafts
+  app.post('/accounts/:account/drafts/batchget', authMiddleware, validateAccount, async (req, res) => {
+    const account = Array.isArray(req.params.account) ? req.params.account[0] : req.params.account;
+    const batchGetRequest: DraftBatchGetRequest = req.body || {};
+
+    try {
+      const response = await apiClient.batchGetDrafts(account, {
+        offset: batchGetRequest.offset ?? 0,
+        count: batchGetRequest.count ?? 20,
+        no_content: batchGetRequest.no_content ?? 0,
+      });
+
+      res.json({
+        success: true,
+        account,
+        ...response,
+      });
+    } catch (error) {
+      if (error instanceof WeChatApiError) {
+        res.status(400).json({
+          success: false,
+          error: 'wechat_api_error',
+          errcode: error.errcode,
+          errmsg: error.errmsg,
+          account,
+        });
+        return;
+      }
+
+      if (error instanceof TokenError) {
+        res.status(400).json({
+          success: false,
+          error: 'token_error',
+          errcode: error.errcode,
+          errmsg: error.errmsg,
+          account,
+        });
+        return;
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'internal_error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   // Upload asset (image for body or cover)
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
@@ -229,7 +278,7 @@ export function createServer(): Express {
 
       try {
         if (usage === 'body_image') {
-          const response = await apiClient.uploadBodyImage(account, file.buffer, file.originalname);
+          const response = await apiClient.uploadBodyImage(account, file.buffer, file.originalname, file.mimetype);
           res.json({
             success: true,
             account,

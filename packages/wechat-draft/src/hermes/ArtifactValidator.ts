@@ -177,6 +177,6 @@ export class ArtifactValidator {
    * WeChat image URLs typically start with https://mmbiz.qpic.cn/
    */
   private isWechatImageUrl(url: string): boolean {
-    return url.startsWith('https://mmbiz.qpic.cn/');
+    return url.startsWith('https://mmbiz.qpic.cn/') || url.startsWith('http://mmbiz.qpic.cn/');
   }
 }

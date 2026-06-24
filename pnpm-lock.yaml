@@ -78,6 +78,9 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.1.0
+      prosemirror-model:
+        specifier: ^1.25.9
+        version: 1.25.9
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -3869,6 +3872,10 @@ packages:
       wcwidth: 1.0.1
     dev: true
 
+  /orderedmap@2.1.1:
+    resolution: {integrity: sha512-TvAWxi0nDe1j/rtMcWcIj94+Ffe6n7zhow33h40SKxmsmozs6dz/e+EajymfoFcHd7sxNn8yHM8839uixMOV6g==}
+    dev: false
+
   /os-tmpdir@1.0.2:
     resolution: {integrity: sha512-D2FR03Vir7FIu45XBY20mTb+/ZSWB00sjU9jdQXt83gDrI4Ztz5Fs7/yy74g2N5SVQY4xY1qDr4rNddwYRVX0g==}
     engines: {node: '>=0.10.0'}
@@ -4069,6 +4076,12 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
     dev: true
+
+  /prosemirror-model@1.25.9:
+    resolution: {integrity: sha512-pRTklkDDMMRopyoAcrr9wV/8g/RYgrLHBuJAb5hlEuYZRdm5yqmPjWId83fpBwPpSFqEdja0H7Dfd7z1X/npcA==}
+    dependencies:
+      orderedmap: 2.1.1
+    dev: false
 
   /proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}

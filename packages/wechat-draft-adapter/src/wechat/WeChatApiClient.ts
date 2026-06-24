@@ -6,9 +6,18 @@
  */
 
 import { TokenManager, TokenError } from './TokenManager.js';
-import { DraftAddRequest, DraftAddResponse, WechatApiError, UploadImageResponse, AddMaterialResponse } from '../types/wechat.js';
+import {
+  DraftAddRequest,
+  DraftAddResponse,
+  DraftBatchGetRequest,
+  DraftBatchGetResponse,
+  WechatApiError,
+  UploadImageResponse,
+  AddMaterialResponse,
+} from '../types/wechat.js';
 
 const WECHAT_DRAFT_ADD_API = 'https://api.weixin.qq.com/cgi-bin/draft/add';
+const WECHAT_DRAFT_BATCHGET_API = 'https://api.weixin.qq.com/cgi-bin/draft/batchget';
 const WECHAT_UPLOAD_IMAGE_API = 'https://api.weixin.qq.com/cgi-bin/media/uploadimg';
 const WECHAT_ADD_MATERIAL_API = 'https://api.weixin.qq.com/cgi-bin/material/add_material';
 
@@ -59,18 +68,68 @@ export class WeChatApiClient {
   }
 
   /**
+   * Fetch draft list via WeChat draft/batchget API.
+   * Automatically retries once on token error.
+   */
+  async batchGetDrafts(account: string, request: DraftBatchGetRequest): Promise<DraftBatchGetResponse> {
+    try {
+      return await this.callDraftBatchGet(account, request);
+    } catch (error) {
+      if (error instanceof WeChatApiError && error.isTokenError()) {
+        this.tokenManager.clearToken(account);
+        return await this.callDraftBatchGet(account, request);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Call draft/batchget API with current token.
+   */
+  private async callDraftBatchGet(account: string, request: DraftBatchGetRequest): Promise<DraftBatchGetResponse> {
+    const token = await this.tokenManager.getToken(account);
+    const url = `${WECHAT_DRAFT_BATCHGET_API}?access_token=${token}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        offset: request.offset ?? 0,
+        count: request.count ?? 20,
+        no_content: request.no_content ?? 0,
+      }),
+    });
+
+    const data: unknown = await response.json();
+
+    if (typeof data === 'object' && data !== null && 'errcode' in data && (data as any).errcode !== 0) {
+      const error = data as WechatApiError;
+      throw new WeChatApiError(error.errcode, error.errmsg, account);
+    }
+
+    return data as DraftBatchGetResponse;
+  }
+
+  /**
    * Upload body image via WeChat uploadimg API.
    * Returns a WeChat CDN URL suitable for inline content.
    * Automatically retries once on token error.
    */
-  async uploadBodyImage(account: string, fileBuffer: Buffer, filename: string): Promise<UploadImageResponse> {
+  async uploadBodyImage(
+    account: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string
+  ): Promise<UploadImageResponse> {
     try {
-      return await this.callUploadImage(account, fileBuffer, filename);
+      return await this.callUploadImage(account, fileBuffer, filename, mimeType);
     } catch (error) {
       // Retry once on token error
       if (error instanceof WeChatApiError && error.isTokenError()) {
         this.tokenManager.clearToken(account);
-        return await this.callUploadImage(account, fileBuffer, filename);
+        return await this.callUploadImage(account, fileBuffer, filename, mimeType);
       }
       throw error;
     }
@@ -97,13 +156,18 @@ export class WeChatApiClient {
   /**
    * Call uploadimg API with current token.
    */
-  private async callUploadImage(account: string, fileBuffer: Buffer, filename: string): Promise<UploadImageResponse> {
+  private async callUploadImage(
+    account: string,
+    fileBuffer: Buffer,
+    filename: string,
+    mimeType: string
+  ): Promise<UploadImageResponse> {
     const token = await this.tokenManager.getToken(account);
     const url = `${WECHAT_UPLOAD_IMAGE_API}?access_token=${token}`;
 
     // Build FormData
     const formData = new FormData();
-    const blob = new Blob([fileBuffer], { type: 'image/jpeg' });
+    const blob = new Blob([fileBuffer], { type: mimeType || 'application/octet-stream' });
     formData.append('media', blob, filename);
 
     const response = await fetch(url, {
