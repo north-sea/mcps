@@ -45,9 +45,27 @@ export const YUELIANG_DEFAULT_PROFILE: WechatStyleProfile = {
   hidden_paragraph_style: 'display: none;',
 };
 
+export const XIABAN_DEFAULT_PROFILE: WechatStyleProfile = {
+  profile_id: 'xiaban.default',
+  account_id: 'xiaban',
+  version: '2026-06-25-production-safe',
+  container_style:
+    'max-width: 720px;margin: 0 auto;padding: 8px;font-family: PingFang SC,system-ui,-apple-system,BlinkMacSystemFont,Helvetica Neue,Hiragino Sans GB,Microsoft YaHei UI,Microsoft YaHei,Arial,sans-serif;font-size: 16px;line-height: 1.78 !important;font-weight: 400;color: #262626 !important;text-align: left !important;overflow-wrap: break-word;word-wrap: break-word;',
+  paragraph_style: 'margin: 6px 0 20px !important;',
+  image_section_style: 'margin: 8px 0 22px !important;',
+  image_style:
+    'max-width: 100%;max-height: 600px !important;height: auto;display: block;margin: 30px auto;border-radius: 4px;border: 1px solid rgba(38, 38, 38, 0.08);',
+  divider_style: 'margin: 2.5rem 0;border: none;height: 1px;background-color: rgba(32, 124, 88, 0.2);',
+  strong_style: 'font-weight: 700;color: #207C58 !important;',
+  heading_style:
+    'margin: 34px 0 18px !important;font-size: 20px;line-height: 1.55 !important;font-weight: 700;color: #207C58 !important;border-left: 3px solid #207C58;padding-left: 12px;',
+  hidden_paragraph_style: 'display: none;',
+};
+
 const STYLE_PROFILES = new Map<string, WechatStyleProfile>([
   [WEIYUCHENGCHUN_DEFAULT_PROFILE.profile_id, WEIYUCHENGCHUN_DEFAULT_PROFILE],
   [YUELIANG_DEFAULT_PROFILE.profile_id, YUELIANG_DEFAULT_PROFILE],
+  [XIABAN_DEFAULT_PROFILE.profile_id, XIABAN_DEFAULT_PROFILE],
 ]);
 
 export function getWechatStyleProfile(profileId: string): WechatStyleProfile {

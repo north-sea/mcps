@@ -40,9 +40,11 @@ docker save wechat-draft-adapter:latest | gzip | ssh ecs 'gunzip | docker load'
 cat > /opt/wechat-adapter/.env <<EOF
 PORT=3000
 ADAPTER_AUTH_TOKEN=<生成的 token>
-ALLOWED_ACCOUNTS=yueliang
+ALLOWED_ACCOUNTS=weiyuchengchun,yueliang,xiaban
 WECHAT_APPID_YUELIANG=wx...
 WECHAT_APPSECRET_YUELIANG=<secret>
+WECHAT_APPID_XIABAN=wx...
+WECHAT_APPSECRET_XIABAN=<secret>
 EOF
 
 chmod 600 /opt/wechat-adapter/.env
@@ -94,7 +96,7 @@ Type=simple
 User=wechat-adapter
 WorkingDirectory=/opt/wechat-adapter
 EnvironmentFile=/opt/wechat-adapter/.env
-ExecStart=/usr/bin/node /opt/wechat-adapter/dist/server.js
+ExecStart=/usr/bin/node /opt/wechat-adapter/dist/index.js
 Restart=on-failure
 RestartSec=10s
 
@@ -182,21 +184,21 @@ curl http://localhost:3000/health
 # 预期输出
 {
   "status": "ok",
-  "capabilities": ["check_credentials", "draft_add"],
-  "allowed_accounts": ["yueliang"]
+  "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"],
+  "allowed_accounts": ["weiyuchengchun", "yueliang", "xiaban"]
 }
 ```
 
 ### Token Dry-run
 
 ```bash
-curl -X POST http://localhost:3000/accounts/yueliang/check-credentials \
+curl -X POST http://localhost:3000/accounts/xiaban/check-credentials \
   -H "Authorization: Bearer $ADAPTER_AUTH_TOKEN"
 
 # 预期输出（成功）
 {
   "success": true,
-  "account": "yueliang",
+  "account": "xiaban",
   "token_valid": true,
   "expires_in": 7199
 }
@@ -223,11 +225,11 @@ wechat_list_accounts
   "data": {
     "accounts": [
       {
-        "account_id": "yueliang",
-        "display_name": "月亮",
+        "account_id": "xiaban",
+        "display_name": "下班不躺平",
         "enabled": true,
         "adapter_id": "ali-wechat-egress",
-        "capabilities": ["check_credentials", "draft_add", "draft_batchget"]
+        "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"]
       }
     ]
   }

@@ -10,7 +10,7 @@ This document provides a complete example of a `workflow_artifacts` entry that p
   "run_id": "run_20260621_001",
   "task_id": "task_draft_001",
   "topic_id": "550e8400-e29b-41d4-a716-446655440000",
-  "account": "yueliang",
+  "account": "xiaban",
   "stage": "publish_ready",
   "type": "wechat_api_article",
   "name": "article.wechat-api-ready.json",
@@ -23,12 +23,12 @@ This document provides a complete example of a `workflow_artifacts` entry that p
     "publish_ready": true,
     "title": "AI 技术发展趋势分析",
     "digest": "本文深入分析 2026 年 AI 技术的最新发展趋势",
-    "author": "月亮",
+    "author": "mcps",
     "content_source_url": "https://example.com/articles/ai-trends-2026",
     "cover": {
       "thumb_media_id": "PERMANENT_THUMB_MEDIA_ID_ABC123"
     },
-    "style_profile_id": "yueliang.default",
+    "style_profile_id": "xiaban.default",
     "style_version": "2026-06-21",
     "schema_version": "wechat_api_article.v1",
     "source_article_document_artifact_id": "artifact_20260624_article_document_001",

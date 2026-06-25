@@ -81,6 +81,9 @@ importers:
       prosemirror-model:
         specifier: ^1.25.9
         version: 1.25.9
+      yaml:
+        specifier: ^2.7.1
+        version: 2.7.1
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -5328,7 +5331,6 @@ packages:
     resolution: {integrity: sha512-10ULxpnOCQXxJvBgxsn9ptjq6uviG/htZKk9veJGhlqn3w/DxQ631zFF+nlQXLwmImeS5amR2dl2U8sg6U9jsQ==}
     engines: {node: '>= 14'}
     hasBin: true
-    dev: true
 
   /yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}

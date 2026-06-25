@@ -53,16 +53,18 @@ export class JobStore {
    */
   async getJobById(jobId: string, lookbackDays: number = 7): Promise<DraftJob | null> {
     const files = await this.getRecentJobFiles(lookbackDays);
+    let latestJob: DraftJob | null = null;
 
     for (const file of files) {
       const jobs = await this.readJobsFromFile(file);
-      const found = jobs.find((j) => j.job_id === jobId);
-      if (found) {
-        return found;
+      for (const job of jobs) {
+        if (job.job_id === jobId && this.isNewerJobState(job, latestJob)) {
+          latestJob = job;
+        }
       }
     }
 
-    return null;
+    return latestJob;
   }
 
   /**
@@ -75,10 +77,8 @@ export class JobStore {
     for (const file of files) {
       const jobs = await this.readJobsFromFile(file);
       for (const job of jobs) {
-        if (job.artifact_id === artifactId) {
-          if (!latestJob || new Date(job.created_at) > new Date(latestJob.created_at)) {
-            latestJob = job;
-          }
+        if (job.artifact_id === artifactId && this.isNewerJobState(job, latestJob)) {
+          latestJob = job;
         }
       }
     }
@@ -109,6 +109,13 @@ export class JobStore {
   private getJobFilePath(date: Date): string {
     const dateStr = this.formatDate(date);
     return join(this.jobsDir, `${dateStr}.jsonl`);
+  }
+
+  private isNewerJobState(candidate: DraftJob, current: DraftJob | null): boolean {
+    if (!current) {
+      return true;
+    }
+    return new Date(candidate.updated_at).getTime() >= new Date(current.updated_at).getTime();
   }
 
   /**

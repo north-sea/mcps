@@ -26,11 +26,11 @@ WeChat Draft MCP Server 提供微信公众号草稿管理能力，通过 [Model 
 {
   "accounts": [
     {
-      "account_id": "weiyuchengchun",
-      "display_name": "微雨成春",
+      "account_id": "xiaban",
+      "display_name": "下班不躺平",
       "enabled": true,
       "adapter_id": "ali-wechat-egress",
-      "capabilities": ["check_credentials", "draft_add", "asset_upload"]
+      "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"]
     }
   ]
 }
@@ -57,7 +57,7 @@ WeChat Draft MCP Server 提供微信公众号草稿管理能力，通过 [Model 
 **输出**:
 ```json
 {
-  "account": "weiyuchengchun",
+  "account": "xiaban",
   "usage": "body_image",
   "source_type": "local_path",
   "filename": "cover.jpg",
@@ -95,7 +95,7 @@ await mcpClient.callTool('wechat_upload_asset', {
 
 // 上传远程封面图片
 await mcpClient.callTool('wechat_upload_asset', {
-  account: 'weiyuchengchun',
+  account: 'xiaban',
   usage: 'cover_image',
   source_type: 'remote_url',
   source: 'https://example.com/cover.jpg'
@@ -197,7 +197,7 @@ await mcpClient.callTool('wechat_upload_asset', {
    ```javascript
    // 上传封面
    const coverResult = await mcpClient.callTool('wechat_upload_asset', {
-     account: 'weiyuchengchun',
+    account: 'xiaban',
      usage: 'cover_image',
      source_type: 'local_path',
      source: '/path/to/cover.jpg'
@@ -206,7 +206,7 @@ await mcpClient.callTool('wechat_upload_asset', {
 
    // 上传正文图片
    const bodyImageResult = await mcpClient.callTool('wechat_upload_asset', {
-     account: 'weiyuchengchun',
+    account: 'xiaban',
      usage: 'body_image',
      source_type: 'local_path',
      source: '/path/to/body-image.jpg'

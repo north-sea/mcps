@@ -1,71 +1,77 @@
-# WeChat Draft MCP Configuration Example
+# Copy this file to accounts.yaml or point WECHAT_DRAFT_CONFIG_PATH at it.
+# Do not add raw AppSecret, AccessToken, adapter auth token, or hermes-db token.
 
-This file shows the expected structure for `config/accounts.yaml` (production) or inline config (MVP).
-
-## Account Configuration
-
-```yaml
 accounts:
+  - account_id: weiyuchengchun
+    display_name: 微雨成春
+    enabled: true
+    adapter_account_ref: weiyuchengchun
+    adapter_id: ali-wechat-egress
+    metadata:
+      operator_note: MVP account for WeChat draft testing
+      style_profile_id: weiyuchengchun.default
+
   - account_id: yueliang
-    display_name: 月亮
+    display_name: 月亮睡了我不睡
     enabled: true
     adapter_account_ref: yueliang
     adapter_id: ali-wechat-egress
     metadata:
-      operator_note: MVP account for WeChat draft testing
+      operator_note: Moon Sleeping account for WeChat draft testing
+      style_profile_id: yueliang.default
+
+  - account_id: xiaban
+    display_name: 下班不躺平
+    enabled: true
+    adapter_account_ref: xiaban
+    adapter_id: ali-wechat-egress
+    metadata:
+      operator_note: Xiaban account for multi-account production smoke
+      style_profile_id: xiaban.default
+      naming_rule: Stable short pinyin, lowercase ASCII, env-safe; do not rename after production use.
 
 adapters:
   - adapter_id: ali-wechat-egress
-    base_url: http://100.x.x.x:3000  # Tailscale private endpoint
+    base_url: http://100.x.x.x:3000
     auth_ref: env:WECHAT_ADAPTER_AUTH_TOKEN
     allowed_accounts:
+      - weiyuchengchun
       - yueliang
+      - xiaban
     egress_public_ip: <REDACTED_ECS_PUBLIC_IP>
-    network_path: tailscale  # or wireguard / ssh_tunnel / private_vpc
+    network_path: tailscale
     timeout_ms: 10000
     capabilities:
       - check_credentials
       - draft_add
       - draft_batchget
+      - asset_upload
     metadata:
       deployment_note: Ali ECS, systemd service wechat-adapter
       host_alias: ali
 
 credentials:
+  - account_id: weiyuchengchun
+    credential_location: ecs_adapter
+    adapter_account_ref: weiyuchengchun
+    appid_hint: wx...weiyuchengchun
+    secret_source_hint: ECS environment variable
+    ip_whitelist_note: ECS egress IP configured in WeChat console
+
   - account_id: yueliang
     credential_location: ecs_adapter
     adapter_account_ref: yueliang
-    appid_hint: wx...abc123
+    appid_hint: wx...yueliang
+    secret_source_hint: ECS environment variable
+    ip_whitelist_note: ECS egress IP configured in WeChat console
+
+  - account_id: xiaban
+    credential_location: ecs_adapter
+    adapter_account_ref: xiaban
+    appid_hint: wx...xiaban
     secret_source_hint: ECS environment variable
     ip_whitelist_note: ECS egress IP configured in WeChat console
 
 hermes_db:
-  base_url: http://localhost:8787
+  base_url: http://100.113.231.101:8765
   timeout_ms: 10000
-```
-
-## Environment Variables
-
-MVP uses environment variables for sensitive configuration:
-
-```bash
-# ECS Adapter connection
-export WECHAT_ADAPTER_BASE_URL="http://100.x.x.x:3000"
-export WECHAT_ADAPTER_AUTH_TOKEN="<REDACTED>"
-export WECHAT_ADAPTER_NETWORK_PATH="tailscale"
-export WECHAT_ECS_EGRESS_IP="<REDACTED>"
-
-# Hermes-db connection
-export HERMES_DB_BASE_URL="http://localhost:8787"
-
-# Runtime path (optional)
-export WECHAT_DRAFT_RUNTIME_PATH="/var/run/wechat-draft"
-```
-
-## Security Notes
-
-- **Do not commit** raw AppSecret, AccessToken, or adapter auth tokens
-- Use `auth_ref` to reference environment variables or secret managers
-- Adapter base_url should be private network endpoint (Tailscale/WireGuard/SSH tunnel)
-- ECS egress IP must be configured in WeChat IP whitelist
-- NAS-side MCP never stores AppSecret directly

@@ -70,11 +70,13 @@ export PORT=3000
 export ADAPTER_AUTH_TOKEN="<生成的随机 token>"
 
 # 允许的账号（逗号分隔）
-export ALLOWED_ACCOUNTS="yueliang"
+export ALLOWED_ACCOUNTS="weiyuchengchun,yueliang,xiaban"
 
 # 微信 AppID/AppSecret
 export WECHAT_APPID_YUELIANG="wx..."
 export WECHAT_APPSECRET_YUELIANG="<secret>"
+export WECHAT_APPID_XIABAN="wx..."
+export WECHAT_APPSECRET_XIABAN="<secret>"
 ```
 
 ---
@@ -218,7 +220,7 @@ servers:
 curl http://100.64.0.2:3000/health
 
 # 预期输出：
-# {"status":"ok","capabilities":["check_credentials","draft_add"],"allowed_accounts":["yueliang"]}
+# {"status":"ok","capabilities":["check_credentials","draft_add","draft_batchget","asset_upload"],"allowed_accounts":["weiyuchengchun","yueliang","xiaban"]}
 ```
 
 ---

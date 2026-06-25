@@ -30,6 +30,25 @@ export interface WorkflowArtifact {
   updated_at: string;
 }
 
+function normalizeWorkflowArtifact(value: WorkflowArtifact): WorkflowArtifact {
+  const metadata = value.metadata;
+  if (typeof metadata === 'string') {
+    try {
+      return {
+        ...value,
+        metadata: JSON.parse(metadata) as Record<string, unknown>,
+      };
+    } catch {
+      return {
+        ...value,
+        metadata: {},
+      };
+    }
+  }
+
+  return value;
+}
+
 export interface WechatArticleLedger {
   account: string;
   run_id: string;
@@ -156,7 +175,7 @@ export class HermesDbClient {
         throw new Error((result as any).message || 'Unknown error from hermes-db');
       }
 
-      return result as WorkflowArtifact || null;
+      return result ? normalizeWorkflowArtifact(result as WorkflowArtifact) : null;
     } catch (error) {
       // If artifact not found, return null instead of throwing
       if (error instanceof Error && (error.message.includes('not found') || error.message.includes('does not exist') || error.message.includes('不存在'))) {

@@ -163,6 +163,21 @@ const validator = new ArticleDocumentValidator();
   assert(!html.includes('![]('), 'renderer does not leave Markdown image syntax');
 }
 
+{
+  const profile = getWechatStyleProfile('xiaban.default');
+  assert(profile.account_id === 'xiaban', 'xiaban.default style profile resolves to xiaban account');
+  const html = new WechatArticleDocumentRenderer(profile).render({
+    article: fixture({ style_profile_id: 'xiaban.default' }),
+  }).html;
+  assert(html.includes('#207C58'), 'xiaban.default applies production-safe accent color');
+}
+
+assertThrows(
+  () => getWechatStyleProfile('xiaban.missing'),
+  'unknown style profile fails closed',
+  'Unknown WeChat style profile'
+);
+
 assertThrows(
   () =>
     new WechatArticleDocumentRenderer(getWechatStyleProfile('yueliang.default')).render({
@@ -209,6 +224,22 @@ const sourceArtifact = {
   const payload = new DraftPayloadBuilder().buildPayload(artifact);
   assert(payload.success, 'generated artifact can build draft payload');
   assert(payload.payload?.articles[0].thumb_media_id === 'mock-thumb-media-id', 'payload has cover thumb_media_id');
+}
+
+{
+  const xiabanArtifact = new ArticleDocumentToWechatArtifactBuilder().build({
+    source: {
+      ...sourceArtifact,
+      account: 'xiaban',
+      metadata: { style_profile_id: 'xiaban.default' },
+      content_text: JSON.stringify(fixture({ style_profile_id: 'xiaban.default' })),
+    },
+  });
+  assert(
+    xiabanArtifact.metadata.style_profile_id === 'xiaban.default',
+    'builder preserves xiaban.default style profile'
+  );
+  assert(xiabanArtifact.account === 'xiaban', 'builder preserves xiaban account');
 }
 
 {

@@ -31,8 +31,8 @@ Health check，返回 capabilities 和 allowed accounts。
 ```json
 {
   "status": "ok",
-  "capabilities": ["check_credentials", "draft_add", "asset_upload"],
-  "allowed_accounts": ["weiyuchengchun"]
+  "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"],
+  "allowed_accounts": ["weiyuchengchun", "yueliang", "xiaban"]
 }
 ```
 
@@ -137,7 +137,7 @@ AccessToken dry-run，验证账号凭据有效性。
 
 **必需**:
 - `ADAPTER_AUTH_TOKEN`: Adapter HTTP 认证 token（NAS MCP 使用）
-- `ALLOWED_ACCOUNTS`: 允许的账号列表，逗号分隔（例如 `weiyuchengchun,account2`）
+- `ALLOWED_ACCOUNTS`: 允许的账号列表，逗号分隔（例如 `weiyuchengchun,yueliang,xiaban`）
 - `WECHAT_APPID_<ACCOUNT>`: 各账号的 AppID（例如 `WECHAT_APPID_WEIYUCHENGCHUN`）
 - `WECHAT_APPSECRET_<ACCOUNT>`: 各账号的 AppSecret（例如 `WECHAT_APPSECRET_WEIYUCHENGCHUN`）
 
@@ -151,11 +151,13 @@ AccessToken dry-run，验证账号凭据有效性。
 export ADAPTER_AUTH_TOKEN="your-secure-token"
 
 # 允许的账号
-export ALLOWED_ACCOUNTS="weiyuchengchun"
+export ALLOWED_ACCOUNTS="weiyuchengchun,yueliang,xiaban"
 
 # 账号凭据
 export WECHAT_APPID_WEIYUCHENGCHUN="wx1234567890abcdef"
 export WECHAT_APPSECRET_WEIYUCHENGCHUN="abcdef1234567890abcdef1234567890"
+export WECHAT_APPID_XIABAN="wxabcdef1234567890"
+export WECHAT_APPSECRET_XIABAN="abcdef1234567890abcdef1234567890"
 
 # 端口（可选）
 export PORT=3000
@@ -186,7 +188,7 @@ pnpm build
 ```bash
 pnpm start
 # 或
-node ./dist/server.js
+node ./dist/index.js
 ```
 
 ### 5. 配置 systemd (生产环境)
@@ -202,7 +204,7 @@ User=wechat-adapter
 WorkingDirectory=/opt/wechat-draft-adapter
 Environment="NODE_ENV=production"
 EnvironmentFile=/etc/wechat-adapter/.env
-ExecStart=/usr/bin/node /opt/wechat-draft-adapter/dist/server.js
+ExecStart=/usr/bin/node /opt/wechat-draft-adapter/dist/index.js
 Restart=always
 RestartSec=10
 

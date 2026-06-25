@@ -121,7 +121,7 @@ async createDraft(account: string, request: DraftAddRequest): Promise<DraftAddRe
 **ECS adapter 启动日志**:
 
 ```
-✅ Loaded credentials for account: yueliang
+✅ Loaded credentials for account: xiaban
 ❌ Logging appid/appsecret in production
 ```
 

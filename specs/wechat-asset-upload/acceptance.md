@@ -287,3 +287,27 @@
 **Production Readiness**: ⚠️ PENDING (Live Smoke + Adapter Deployment)
 
 **Recommendation**: Feature 实现完整且质量合格，可以进入 live smoke 和生产部署阶段。建议按 "Recommendations for First Use" 章节执行后续验证。
+
+---
+
+## Completion Record
+
+**Feature Status**: ✅ COMPLETED  
+**Completion Date**: 2026-06-22
+
+**Git Commits**:
+- `70a91ba` - feat(wechat-draft): add asset upload foundation
+- `1904b57` - feat(wechat-draft): integrate asset upload tool
+- `29d8dd9` - docs(wechat-draft): add asset upload documentation
+
+**Branch**: main  
+**Total Changes**: 23 files changed, 3794 insertions(+), 95 deletions(-)
+
+**Deliverables**:
+- ✅ MCP Tool: `wechat_upload_asset`
+- ✅ Adapter Endpoint: `POST /accounts/:account/assets`
+- ✅ Unit Tests: 18/18 passed
+- ✅ Documentation: Complete (MCP + Adapter README)
+- ✅ SDD Artifacts: 7 files
+
+**Not Pushed**: Commits are local only. Use `git push` to publish.

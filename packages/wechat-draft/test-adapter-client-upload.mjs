@@ -4,6 +4,7 @@
  */
 
 import { WechatAdapterClient } from './dist/wechat/WechatAdapterClient.js';
+import { createServer } from 'node:http';
 
 // Mock adapter config
 const mockConfig = {
@@ -57,27 +58,40 @@ async function testUploadAssetConstructsRequest() {
 async function testUploadAsset404MapsToEndpointNotFound() {
   console.log('\n--- Test: uploadAsset 404 maps to endpoint_not_found ---\n');
 
-  // Use httpbin to simulate 404
+  const server = createServer((req, res) => {
+    res.statusCode = 404;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'not_found' }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+
   const client = new WechatAdapterClient({
     ...mockConfig,
-    base_url: 'https://httpbin.org',
+    base_url: `http://127.0.0.1:${port}`,
     auth_ref: 'dummy-token',
   });
 
   const testBytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]);
 
   try {
-    await client.uploadAsset('test-account', {
-      usage: 'body_image',
-      bytes: testBytes,
-      filename: 'test.jpg',
-      mimeType: 'image/jpeg',
-    });
-  } catch (error) {
-    assert(
-      error.code === 'adapter_endpoint_not_found' || error.name === 'AdapterEndpointNotFoundError',
-      'Should map 404 to endpoint_not_found'
-    );
+    try {
+      await client.uploadAsset('test-account', {
+        usage: 'body_image',
+        bytes: testBytes,
+        filename: 'test.jpg',
+        mimeType: 'image/jpeg',
+      });
+      assert(false, 'Should map 404 to endpoint_not_found');
+    } catch (error) {
+      assert(
+        error.code === 'adapter_endpoint_not_found' || error.name === 'AdapterEndpointNotFoundError',
+        'Should map 404 to endpoint_not_found'
+      );
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
   }
 }
 

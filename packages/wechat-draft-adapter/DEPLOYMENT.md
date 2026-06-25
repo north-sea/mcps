@@ -16,7 +16,7 @@
 
 ### 2. WeChat Credentials
 
-- WeChat AppID and AppSecret for account `yueliang`
+- WeChat AppID and AppSecret for each allowed account. Current production accounts include `weiyuchengchun`, `yueliang`, and `xiaban`.
 - IP whitelist configured in WeChat backend
 
 ### 3. Environment Variables
@@ -30,9 +30,11 @@ ADAPTER_AUTH_TOKEN=<random-secure-token>
 # WeChat credentials (one pair per account)
 WECHAT_APPID_YUELIANG=<appid>
 WECHAT_APPSECRET_YUELIANG=<appsecret>
+WECHAT_APPID_XIABAN=<appid>
+WECHAT_APPSECRET_XIABAN=<appsecret>
 
 # Allowed accounts (comma-separated)
-ALLOWED_ACCOUNTS=yueliang
+ALLOWED_ACCOUNTS=weiyuchengchun,yueliang,xiaban
 
 # Port (optional, default: 3000)
 PORT=3000
@@ -82,7 +84,9 @@ docker run -d \
   -e ADAPTER_AUTH_TOKEN="${ADAPTER_AUTH_TOKEN}" \
   -e WECHAT_APPID_YUELIANG="${WECHAT_APPID_YUELIANG}" \
   -e WECHAT_APPSECRET_YUELIANG="${WECHAT_APPSECRET_YUELIANG}" \
-  -e ALLOWED_ACCOUNTS="yueliang" \
+  -e WECHAT_APPID_XIABAN="${WECHAT_APPID_XIABAN}" \
+  -e WECHAT_APPSECRET_XIABAN="${WECHAT_APPSECRET_XIABAN}" \
+  -e ALLOWED_ACCOUNTS="weiyuchengchun,yueliang,xiaban" \
   wechat-draft-adapter:latest
 ```
 
@@ -109,7 +113,7 @@ services:
       - ADAPTER_AUTH_TOKEN=${ADAPTER_AUTH_TOKEN}
       - WECHAT_APPID_YUELIANG=${WECHAT_APPID_YUELIANG}
       - WECHAT_APPSECRET_YUELIANG=${WECHAT_APPSECRET_YUELIANG}
-      - ALLOWED_ACCOUNTS=yueliang
+      - ALLOWED_ACCOUNTS=weiyuchengchun,yueliang,xiaban
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 30s
@@ -135,7 +139,9 @@ Create `/opt/wechat-adapter/.env`:
 ADAPTER_AUTH_TOKEN=your-secure-token-here
 WECHAT_APPID_YUELIANG=wx1234567890abcdef
 WECHAT_APPSECRET_YUELIANG=1234567890abcdef1234567890abcdef
-ALLOWED_ACCOUNTS=yueliang
+WECHAT_APPID_XIABAN=wxabcdef1234567890
+WECHAT_APPSECRET_XIABAN=abcdef1234567890abcdef1234567890
+ALLOWED_ACCOUNTS=weiyuchengchun,yueliang,xiaban
 ```
 
 Load and run:
@@ -175,8 +181,9 @@ Expected output:
 
 ```
 WeChat Adapter running on port 3000
-Allowed accounts: yueliang
+Allowed accounts: weiyuchengchun, yueliang, xiaban
 Loaded credentials for account: yueliang
+Loaded credentials for account: xiaban
 ```
 
 ### 2. Health Check
@@ -190,15 +197,15 @@ Expected response:
 ```json
 {
   "status": "ok",
-  "capabilities": ["check_credentials", "draft_add"],
-  "allowed_accounts": ["yueliang"]
+  "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"],
+  "allowed_accounts": ["weiyuchengchun", "yueliang", "xiaban"]
 }
 ```
 
 ### 3. Check Credentials (From NAS via Tailscale)
 
 ```bash
-curl -X POST http://<ECS_TAILSCALE_IP>:3000/accounts/yueliang/check-credentials \
+curl -X POST http://<ECS_TAILSCALE_IP>:3000/accounts/xiaban/check-credentials \
   -H "Authorization: Bearer ${ADAPTER_AUTH_TOKEN}" \
   -H "Content-Type: application/json"
 ```
@@ -208,7 +215,7 @@ Expected response:
 ```json
 {
   "success": true,
-  "account": "yueliang",
+  "account": "xiaban",
   "token_valid": true,
   "expires_in": 7200
 }

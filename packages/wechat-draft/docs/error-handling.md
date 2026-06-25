@@ -103,7 +103,7 @@
 3. **wechat_token_invalid**:
    ```bash
    # 在 ECS 上检查 AppSecret
-   echo $WECHAT_APPSECRET_YUELIANG
+   echo $WECHAT_APPSECRET_XIABAN
    
    # 检查 IP 白名单（微信公众号后台 -> 设置与开发 -> 基本配置 -> IP白名单）
    ```
@@ -186,7 +186,7 @@ ls -lh ~/.wechat-draft/jobs/
 curl http://<adapter_base_url>/health
 
 # Check credentials (dry-run token)
-curl -X POST http://<adapter_base_url>/accounts/yueliang/check-credentials \
+curl -X POST http://<adapter_base_url>/accounts/xiaban/check-credentials \
   -H "Authorization: Bearer <ADAPTER_AUTH_TOKEN>"
 ```
 

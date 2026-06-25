@@ -34,4 +34,6 @@ The script uploads one body image and one cover image, creates a draft, then cal
 - no Markdown markers remain;
 - body image URLs use `mmbiz.qpic.cn`.
 
-If `HERMES_DB_AUTH_TOKEN` is available, the script also writes artifacts and exercises the MCP artifact path. Without it, the script uses the direct adapter fallback after `DraftPayloadBuilder` has produced the WeChat payload.
+For multi-account production checks, set `WECHAT_CANONICAL_SMOKE_ACCOUNT=xiaban`; the default style profile becomes `xiaban.default` unless `WECHAT_CANONICAL_SMOKE_STYLE_PROFILE` is set explicitly.
+
+The live smoke now requires both `WECHAT_ADAPTER_AUTH_TOKEN` and `HERMES_DB_AUTH_TOKEN`. Missing hermes-db auth is a blocker, because direct adapter fallback is not accepted as full MCP path evidence.

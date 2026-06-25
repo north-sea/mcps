@@ -23,14 +23,18 @@ sudo nano .env
 PORT=3000
 
 # Authentication Token (已生成)
-ADAPTER_AUTH_TOKEN=ILs9Ma/zRNqRT/YMwabt79qG4wAFjT98uYBLOM0HGxw=
+ADAPTER_AUTH_TOKEN=<generate-a-random-token>
 
 # Allowed Accounts
-ALLOWED_ACCOUNTS=weiyuchengchun
+ALLOWED_ACCOUNTS=weiyuchengchun,yueliang,xiaban
 
 # WeChat Credentials - 请填入你的实际值
 WECHAT_APPID_WEIYUCHENGCHUN=wx________________
 WECHAT_APPSECRET_WEIYUCHENGCHUN=________________________________
+WECHAT_APPID_YUELIANG=wx________________
+WECHAT_APPSECRET_YUELIANG=________________________________
+WECHAT_APPID_XIABAN=wx________________
+WECHAT_APPSECRET_XIABAN=________________________________
 ```
 
 **保存并设置权限**:
@@ -78,7 +82,7 @@ ssh ali 'curl -s ifconfig.me'
 ### Step 4: 验证 Token
 
 ```bash
-ssh ali 'curl -X POST http://localhost:3000/accounts/weiyuchengchun/check-credentials -H "Authorization: Bearer $ADAPTER_AUTH_TOKEN"'
+ssh ali 'curl -X POST http://localhost:3000/accounts/xiaban/check-credentials -H "Authorization: Bearer $ADAPTER_AUTH_TOKEN"'
 ```
 
 **预期输出（成功）**:
@@ -181,7 +185,7 @@ ssh -L 3000:localhost:3000 ali
 # 在 ECS 上手动测试
 ssh ali
 source /opt/wechat-adapter/.env
-curl -X POST http://localhost:3000/accounts/yueliang/check-credentials \
+curl -X POST http://localhost:3000/accounts/xiaban/check-credentials \
   -H "Authorization: Bearer $ADAPTER_AUTH_TOKEN"
 ```
 
