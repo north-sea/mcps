@@ -26,10 +26,13 @@ services:
     pull_policy: always
     networks:
       - proxy
+      - hermes-agent_hermes-net
 
 volumes:
   wechat-draft-data:
 
 networks:
   proxy:
+    external: true
+  hermes-agent_hermes-net:
     external: true
