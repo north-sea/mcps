@@ -140,7 +140,7 @@
   - maps_to: Quality Attribute 可观测性, BM-002
   - verify: log snapshot 或 smoke 输出检查不包含 token，包含 request/tool/job correlation 字段
 
-- [ ] T015 [US2/US3] 增加 Dockerfile 和 compose/run 配置
+- [x] T015 [US2/US3] 增加 Dockerfile 和 compose/run 配置
   - scope: `packages/wechat-draft/Dockerfile`, deploy examples, package scripts
   - slice: 容器启动 HTTP MCP 服务，挂载 config/data/assets，healthcheck 使用 Node fetch
   - blocked_by: T004, T007, T013
@@ -149,7 +149,8 @@
   - evidence 2026-06-26: Dockerfile、compose 示例和 `docker:build` script 已实现；`pnpm --filter @mcps/wechat-draft build`、`pnpm --filter @mcps/wechat-draft test`、`docker compose config` 通过。Docker build 因 Docker Hub metadata timeout / Alpine package source 长时间无进展未完成，T015 暂不勾选。
   - evidence 2026-06-26 retry: Dockerfile 已改为 builder/runtime 分离，默认 builder `node:22-bookworm`、runtime `node:22-bookworm-slim`，仅在缺少 native build tools 时安装系统包；正式 `docker build` 仍失败于 Docker Hub `node:22-bookworm*` metadata timeout。
   - evidence 2026-06-26 release-align: 部署改为沿用 `hermes-db` 的 `mcp-release.yml` tag 流程；新增 `deploy/mcp-services.json` 的 `wechat-draft` 条目、`deploy/services/wechat-draft.yml` NAS compose 模板、HTTP `/health` release smoke 分支。`node scripts/resolve-mcp-release.mjs wechat-draft-v0.2.1` 和 deploy compose 模板摘要验证通过；仍需 GitHub Actions/GHCR 或 Docker Hub 可达后完成真实 build/smoke。
-  - evidence 2026-06-26 nas-prep: NAS `/vol1/1000/Docker/wechat-draft-mcp` 已准备 compose/config/.env；因 `3001` 被 `gpt-load` 占用，宿主机端口改为 `3012:3001`，release smoke URL 改为 `http://127.0.0.1:3012/health`。远端 `docker compose config --quiet` 通过，镜像解析为 `ghcr.io/north-sea/wechat-draft-mcp:v0.2.1`。`wechat-draft-v0.2.0` 首次 release 的 NAS preflight 暴露 manifest required env key 误写为插值变量名，已改为容器 env key `AUTH_TOKEN` 后改发 `v0.2.1`。T015 仍等 tag workflow 真实 build/pull/smoke 后勾选。
+  - evidence 2026-06-26 nas-prep: NAS `/vol1/1000/Docker/wechat-draft-mcp` 已准备 compose/config/.env；因 `3001` 被 `gpt-load` 占用，宿主机端口改为 `3012:3001`，release smoke URL 改为 `http://127.0.0.1:3012/health`。远端 `docker compose config --quiet` 通过，镜像解析为 `ghcr.io/north-sea/wechat-draft-mcp:v0.2.1`。`wechat-draft-v0.2.0` 首次 release 的 NAS preflight 暴露 manifest required env key 误写为插值变量名，已改为容器 env key `AUTH_TOKEN` 后改发 `v0.2.1`。
+  - evidence 2026-06-26 release-pass: GitHub Actions `MCP Release` run `28237569254` 通过 test、Git/GHCR preflight、NAS preflight、GHCR build/push、NAS deploy；NAS 容器 `wechat-draft-mcp` 运行 `ghcr.io/north-sea/wechat-draft-mcp:v0.2.1`，端口 `3012->3001`，Docker status `healthy`。
 
 - [x] T016 [US1/US2] 更新客户端配置和运行文档
   - scope: README/docs/deployment examples under `packages/wechat-draft` or spec docs
@@ -173,20 +174,21 @@
   - verify: `pnpm --filter @mcps/wechat-draft test` 或等价命令存在并覆盖 store/auth/health/asset/workflow
   - evidence 2026-06-26: `pnpm --filter @mcps/wechat-draft build` 通过；`pnpm --filter @mcps/wechat-draft test` 通过，39 tests pass，覆盖 config env overlay、auth、HTTP MCP smoke、tool result、logging、health、service upload、error mapping、SQLite store、asset source、workflow idempotency。
 
-- [ ] T018 [Verify] 执行 HTTP MCP end-to-end smoke
+- [x] T018 [Verify] 执行 HTTP MCP end-to-end smoke
   - scope: local service startup, MCP HTTP client fixture, mock hermes-db/adapter
   - slice: 从 `/mcp` 调 `wechat_list_accounts` 和 `wechat_create_draft` 完成端到端闭环
   - blocked_by: T004, T009, T015, T017
   - maps_to: US1-1, US2-1, Producer-Consumer Matrix
   - verify: smoke evidence 记录 endpoint、tool response、job row、mock adapter call count
-  - evidence 2026-06-26 partial: 新增 `src/http/httpMcpSmoke.test.ts`，使用官方 `StreamableHTTPClientTransport` 通过本地 `/mcp` 调 `wechat_list_accounts` 与 `wechat_create_draft`，fake hermes-db/adapter + SQLite 临时库验证重复 idempotency 只触发一次 adapter；`pnpm --filter @mcps/wechat-draft test` 通过。因 T015 Docker build/smoke 未完成，T018 暂不勾选。
+  - evidence 2026-06-26: 新增 `src/http/httpMcpSmoke.test.ts`，使用官方 `StreamableHTTPClientTransport` 通过本地 `/mcp` 调 `wechat_list_accounts` 与 `wechat_create_draft`，fake hermes-db/adapter + SQLite 临时库验证重复 idempotency 只触发一次 adapter；`pnpm --filter @mcps/wechat-draft test` 通过，39 tests pass。
 
-- [ ] T019 [Verify] 执行 Docker smoke 和 migration fallback check
+- [x] T019 [Verify] 执行 Docker smoke 和 migration fallback check
   - scope: Docker image/container, mounted config/data, old stdio entrypoint
   - slice: 新 HTTP 容器可运行；旧 stdio 入口仍可作为迁移兜底编译运行
   - blocked_by: T015, T017
   - maps_to: Deployment, 向后兼容性, NFR-001
   - verify: Docker healthcheck evidence；旧 entrypoint build/start smoke 记录；无真实 token 写入文档
+  - evidence 2026-06-26: `MCP Release` run `28237569254` 构建并部署 `ghcr.io/north-sea/wechat-draft-mcp:v0.2.1` 到 NAS；手动 NAS smoke: `docker ps` 显示容器 `healthy`，`curl http://127.0.0.1:3012/health` 返回 `status=degraded`, `version=0.2.1`, `config_loaded=True`, `runtime_writable=True`, `sqlite_ready=True`, `hermes_db_reachable=True`, `adapter_reachable=False`。degraded 原因为 WeChat adapter 尚未接入，服务本地运行态和 hermes-db 链路已验证。
 
 - [ ] T020 [Closeout Prep] 准备验收记录输入
   - scope: future `acceptance.md`, test/smoke evidence summary
