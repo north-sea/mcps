@@ -35,6 +35,7 @@ const deploy = service.deploy ?? {};
 const test = service.test ?? {};
 const health = deploy.health ?? {};
 const migration = deploy.migration ?? {};
+const requiredEnv = deploy.requiredEnv ?? [];
 
 const outputs = {
   service: serviceName,
@@ -52,6 +53,8 @@ const outputs = {
   container_name: deploy.containerName ?? deploy.composeService ?? "",
   migration_entrypoint: migration.entrypoint ?? "",
   migration_command: migration.command ?? "",
+  required_env_keys: requiredEnv.join(","),
+  smoke_type: health.type ?? (health.url ? "mcp-health" : ""),
   smoke_url: health.url ?? "",
   smoke_token_env: health.tokenEnv ?? "",
   smoke_capabilities: (health.capabilities ?? []).join(","),

@@ -13,7 +13,8 @@
  * - cover_image: jpg/jpeg only, max 64KB (WeChat thumb material requirement)
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { AssetUsage, AssetSourceType } from '../schemas/tool-schemas.js';
 
 // ============================================================================
@@ -51,6 +52,10 @@ export interface LoadedAsset {
   sizeBytes: number;
 }
 
+export interface AssetSourceLoaderConfig {
+  assetRoot?: string;
+}
+
 export class AssetSourceError extends Error {
   constructor(
     message: string,
@@ -67,6 +72,16 @@ export class AssetSourceError extends Error {
 // ============================================================================
 
 export class AssetSourceLoader {
+  private readonly assetRoot?: string;
+
+  constructor(config: AssetSourceLoaderConfig = {}) {
+    this.assetRoot =
+      config.assetRoot ||
+      process.env.WECHAT_DRAFT_ASSET_ROOT ||
+      process.env.ASSET_ROOT ||
+      undefined;
+  }
+
   async load(input: AssetSourceInput): Promise<LoadedAsset> {
     const { usage, source_type, source, filename, mime_type } = input;
 
@@ -112,8 +127,9 @@ export class AssetSourceLoader {
     explicitMimeType?: string
   ): Promise<{ bytes: Uint8Array; filename: string; mimeType: string }> {
     try {
-      const bytes = await readFile(path);
-      const filename = explicitFilename || this.extractFilename(path);
+      const safePath = await this.resolveLocalPath(path);
+      const bytes = await readFile(safePath);
+      const filename = explicitFilename || this.extractFilename(safePath);
       const mimeType = explicitMimeType || this.inferMimeFromFilename(filename);
 
       return {
@@ -122,12 +138,42 @@ export class AssetSourceLoader {
         mimeType,
       };
     } catch (error) {
+      if (error instanceof AssetSourceError) {
+        throw error;
+      }
+
       throw new AssetSourceError(
         `Failed to read local file: ${path}`,
         'ASSET_FILE_NOT_READABLE',
         { path, error: error instanceof Error ? error.message : String(error) }
       );
     }
+  }
+
+  private async resolveLocalPath(path: string): Promise<string> {
+    if (!this.assetRoot) {
+      throw new AssetSourceError(
+        'local_path requires WECHAT_DRAFT_ASSET_ROOT or ASSET_ROOT',
+        'ASSET_SOURCE_INVALID',
+        { source_type: 'local_path' }
+      );
+    }
+
+    const rootPath = await realpath(this.assetRoot);
+    const candidatePath = isAbsolute(path)
+      ? resolve(path)
+      : resolve(rootPath, path);
+    const realCandidatePath = await realpath(candidatePath);
+
+    if (!isPathInside(rootPath, realCandidatePath)) {
+      throw new AssetSourceError(
+        'local_path must resolve under ASSET_ROOT',
+        'ASSET_SOURCE_INVALID',
+        { source_type: 'local_path' }
+      );
+    }
+
+    return realCandidatePath;
   }
 
   private async loadRemoteUrl(
@@ -240,8 +286,7 @@ export class AssetSourceLoader {
   }
 
   private extractFilename(path: string): string {
-    const parts = path.split('/');
-    return parts[parts.length - 1] || 'unknown';
+    return basename(path) || 'unknown';
   }
 
   private extractFilenameFromUrl(url: string): string | null {
@@ -265,4 +310,12 @@ export class AssetSourceLoader {
     }
     return 'application/octet-stream';
   }
+}
+
+function isPathInside(rootPath: string, candidatePath: string): boolean {
+  const relativePath = relative(rootPath, candidatePath);
+  return (
+    relativePath === '' ||
+    (!relativePath.startsWith('..') && !isAbsolute(relativePath) && !relativePath.startsWith(sep))
+  );
 }

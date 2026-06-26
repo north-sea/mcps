@@ -17,7 +17,7 @@ import {
   AdapterTokenError,
   AdapterWeChatApiError,
 } from '../wechat/WechatAdapterClient.js';
-import { JobStore } from '../store/JobStore.js';
+import type { DraftJobStore } from '../store/types.js';
 import { DraftJob, DraftJobStatus } from '../schemas/tool-schemas.js';
 import { EcsWechatAdapterConfig } from '../config/types.js';
 import { ErrorCode } from '../schemas/result-types.js';
@@ -28,16 +28,28 @@ export interface DraftWorkflowContext {
   idempotencyKey: string;
   hermesDbClient: HermesDbClient;
   adapterConfig: EcsWechatAdapterConfig;
-  jobStore: JobStore;
+  jobStore: DraftJobStore;
+}
+
+export interface DraftAdapterClient {
+  checkHealth(): Promise<unknown>;
+  createDraft(account: string, payload: Parameters<WechatAdapterClient['createDraft']>[1]): Promise<Awaited<ReturnType<WechatAdapterClient['createDraft']>>>;
+}
+
+export interface DraftWorkflowDependencies {
+  adapterClientFactory?: (config: EcsWechatAdapterConfig) => DraftAdapterClient;
 }
 
 export class DraftWorkflow {
   private validator: ArtifactValidator;
   private payloadBuilder: DraftPayloadBuilder;
+  private adapterClientFactory: (config: EcsWechatAdapterConfig) => DraftAdapterClient;
 
-  constructor() {
+  constructor(dependencies: DraftWorkflowDependencies = {}) {
     this.validator = new ArtifactValidator();
     this.payloadBuilder = new DraftPayloadBuilder();
+    this.adapterClientFactory =
+      dependencies.adapterClientFactory || ((config) => new WechatAdapterClient(config));
   }
 
   /**
@@ -57,14 +69,12 @@ export class DraftWorkflow {
     };
 
     try {
-      // Step 0: Check idempotency
-      const existingJob = await ctx.jobStore.checkIdempotency(ctx.idempotencyKey);
-      if (existingJob) {
-        return existingJob;
+      // Step 0: Reserve the idempotency key before any external side effect.
+      const initial = await ctx.jobStore.createOrGetJob({ job });
+      job = initial.job;
+      if (!initial.created) {
+        return job;
       }
-
-      // Save initial job
-      await ctx.jobStore.saveJob(job);
 
       // Step 1: Artifact validation
       job = await this.updateJob(job, 'artifact_validation', ctx.jobStore);
@@ -84,7 +94,7 @@ export class DraftWorkflow {
 
       // Step 2: Adapter check
       job = await this.updateJob(job, 'adapter_check', ctx.jobStore);
-      const adapterClient = new WechatAdapterClient(ctx.adapterConfig);
+      const adapterClient = this.adapterClientFactory(ctx.adapterConfig);
 
       try {
         await adapterClient.checkHealth();
@@ -256,7 +266,7 @@ export class DraftWorkflow {
   /**
    * Update job status and save.
    */
-  private async updateJob(job: DraftJob, status: DraftJobStatus, jobStore: JobStore): Promise<DraftJob> {
+  private async updateJob(job: DraftJob, status: DraftJobStatus, jobStore: DraftJobStore): Promise<DraftJob> {
     const updatedJob: DraftJob = {
       ...job,
       status,
@@ -274,7 +284,7 @@ export class DraftWorkflow {
     status: DraftJobStatus,
     errorCode: string,
     errorMessage: string,
-    jobStore: JobStore
+    jobStore: DraftJobStore
   ): Promise<DraftJob> {
     const failedJob: DraftJob = {
       ...job,

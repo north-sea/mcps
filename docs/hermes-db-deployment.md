@@ -22,7 +22,7 @@ packages/hermes-db/
 
 ```bash
 cd packages/hermes-db
-docker build -t ghcr.io/northseacoder/hermes-db-mcp:latest .
+docker build -t ghcr.io/north-sea/hermes-db-mcp:latest .
 ```
 
 本地构建只用于调试。正式发布使用服务级 Git tag：
@@ -35,7 +35,7 @@ git push origin hermes-db-v0.1.1
 GitHub Actions 会构建并推送：
 
 ```text
-ghcr.io/northseacoder/hermes-db-mcp:v0.1.1
+ghcr.io/north-sea/hermes-db-mcp:v0.1.1
 ```
 
 ---

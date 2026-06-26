@@ -62,7 +62,14 @@ git tag hermes-db-v0.1.1
 git push origin hermes-db-v0.1.1
 ```
 
-NAS 只部署具体版本镜像，例如 `ghcr.io/northseacoder/hermes-db-mcp:v0.1.1`，不使用 `latest` 作为运行态版本。
+TypeScript 服务同样使用服务级 tag，例如：
+
+```bash
+git tag wechat-draft-v0.2.0
+git push origin wechat-draft-v0.2.0
+```
+
+NAS 只部署具体版本镜像，例如 `ghcr.io/north-sea/hermes-db-mcp:v0.1.1`，不使用 `latest` 作为运行态版本。
 
 ---
 

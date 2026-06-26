@@ -2,6 +2,10 @@
 
 WeChat Draft MCP Server 提供微信公众号草稿管理能力，通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 暴露给 AI agent。
 
+当前推荐部署方式是 Docker 化 Streamable HTTP MCP 服务，供本机 agent 和 NAS agent 统一通过 `POST /mcp` 调用。部署和客户端配置见 [HTTP Docker Service](docs/http-docker-service.md)。
+
+正式部署与 `hermes-db` 一致：推送 `wechat-draft-vX.Y.Z` tag 后由 GitHub Actions 构建 GHCR 镜像，NAS self-hosted runner 拉取精确版本并重启服务。
+
 ## 功能
 
 - **账号管理**: 列出可用的微信公众号账号
@@ -291,12 +295,25 @@ MCP server 需要以下配置（通过环境变量或 config 文件）：
 - `HERMES_DB_BASE_URL`: hermes-db 地址
 - `HERMES_DB_AUTH_TOKEN`: hermes-db 认证 token（可选）
 
+使用外部 `accounts.yaml` 时，账号清单来自文件；运行时 endpoint 仍可通过
+`WECHAT_ADAPTER_BASE_URL` / `WECHAT_ADAPTER_AUTH_REF` / `HERMES_DB_BASE_URL`
+覆盖 YAML 设置。
+
 ### 4. 运行
 
 ```bash
 pnpm start
 # 或
 node ./dist/index.js
+```
+
+Docker HTTP 服务使用：
+
+```bash
+pnpm --filter @mcps/wechat-draft docker:build
+cd packages/wechat-draft
+cp .env.nas.example .env
+docker compose --env-file .env -f docker-compose.example.yml up -d
 ```
 
 ---

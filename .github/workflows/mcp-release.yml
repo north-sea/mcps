@@ -33,6 +33,8 @@ jobs:
       container_name: ${{ steps.resolve.outputs.container_name }}
       migration_entrypoint: ${{ steps.resolve.outputs.migration_entrypoint }}
       migration_command: ${{ steps.resolve.outputs.migration_command }}
+      required_env_keys: ${{ steps.resolve.outputs.required_env_keys }}
+      smoke_type: ${{ steps.resolve.outputs.smoke_type }}
       smoke_url: ${{ steps.resolve.outputs.smoke_url }}
       smoke_token_env: ${{ steps.resolve.outputs.smoke_token_env }}
       smoke_capabilities: ${{ steps.resolve.outputs.smoke_capabilities }}
@@ -60,6 +62,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Run service tests
         run: ${{ needs.resolve.outputs.test_command }}
@@ -103,8 +110,10 @@ jobs:
         env:
           SERVICE_NAME: ${{ needs.resolve.outputs.service }}
           VERSION: ${{ needs.resolve.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.version }}
           IMAGE_REF: ${{ needs.resolve.outputs.image_ref }}
           MIGRATION_COMMAND: ${{ needs.resolve.outputs.migration_command }}
+          SMOKE_TYPE: ${{ needs.resolve.outputs.smoke_type }}
           SMOKE_URL: ${{ needs.resolve.outputs.smoke_url }}
           SMOKE_CAPABILITIES: ${{ needs.resolve.outputs.smoke_capabilities }}
         run: |
@@ -116,6 +125,7 @@ jobs:
             echo "- Version: ${VERSION}"
             echo "- Image: ${IMAGE_REF}"
             echo "- Migration: ${MIGRATION_COMMAND:-none}"
+            echo "- Smoke type: ${SMOKE_TYPE:-none}"
             echo "- Smoke URL: ${SMOKE_URL:-none}"
             echo "- Required capabilities: ${SMOKE_CAPABILITIES:-none}"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -138,6 +148,7 @@ jobs:
           COMPOSE_SERVICE: ${{ needs.resolve.outputs.compose_service }}
           CONTAINER_NAME: ${{ needs.resolve.outputs.container_name }}
           MIGRATION_COMMAND: ${{ needs.resolve.outputs.migration_command }}
+          REQUIRED_ENV_KEYS: ${{ needs.resolve.outputs.required_env_keys }}
           SMOKE_TOKEN_ENV: ${{ needs.resolve.outputs.smoke_token_env }}
         run: |
           set -euo pipefail
@@ -189,7 +200,10 @@ jobs:
           print(f"image: {actual_image}")
           PY
 
-          required_env_keys=("PG_DSN")
+          required_env_keys=()
+          if [[ -n "${REQUIRED_ENV_KEYS:-}" ]]; then
+            IFS=',' read -r -a required_env_keys <<< "${REQUIRED_ENV_KEYS}"
+          fi
           if [[ -n "${smoke_token_env}" ]]; then
             required_env_keys+=("${smoke_token_env}")
           fi
@@ -366,6 +380,7 @@ jobs:
         env:
           SERVICE_NAME: ${{ needs.resolve.outputs.service }}
           VERSION: ${{ needs.resolve.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.version }}
           IMAGE: ${{ needs.resolve.outputs.image }}
           COMPOSE_PROJECT_DIR: ${{ needs.resolve.outputs.compose_project_dir }}
           COMPOSE_FILE: ${{ needs.resolve.outputs.compose_file }}
@@ -373,6 +388,7 @@ jobs:
           CONTAINER_NAME: ${{ needs.resolve.outputs.container_name }}
           MIGRATION_ENTRYPOINT: ${{ needs.resolve.outputs.migration_entrypoint }}
           MIGRATION_COMMAND: ${{ needs.resolve.outputs.migration_command }}
+          SMOKE_TYPE: ${{ needs.resolve.outputs.smoke_type }}
           SMOKE_URL: ${{ needs.resolve.outputs.smoke_url }}
           SMOKE_TOKEN_ENV: ${{ needs.resolve.outputs.smoke_token_env }}
           SMOKE_CAPABILITIES: ${{ needs.resolve.outputs.smoke_capabilities }}
@@ -383,6 +399,7 @@ jobs:
           override_file=".mcps-release.override.yml"
           migration_entrypoint="${MIGRATION_ENTRYPOINT:-}"
           migration_command="${MIGRATION_COMMAND:-}"
+          smoke_type="${SMOKE_TYPE:-}"
           smoke_url="${SMOKE_URL:-}"
           smoke_token_env="${SMOKE_TOKEN_ENV:-}"
           smoke_capabilities="${SMOKE_CAPABILITIES:-}"
@@ -439,8 +456,9 @@ jobs:
               fi
             fi
 
-            echo "Running MCP health smoke: ${smoke_url}"
-            python3 - "$smoke_url" "$token" "$smoke_capabilities" <<'PY'
+            if [[ "${smoke_type}" == "mcp-health" ]]; then
+              echo "Running MCP health smoke: ${smoke_url}"
+              python3 - "$smoke_url" "$token" "$smoke_capabilities" <<'PY'
           import json
           import time
           import sys
@@ -515,6 +533,55 @@ jobs:
               "capabilities": capability_map,
           }, ensure_ascii=False))
           PY
+            elif [[ "${smoke_type}" == "http-health" ]]; then
+              echo "Running HTTP health smoke: ${smoke_url}"
+              python3 - "$smoke_url" "$token" <<'PY'
+          import json
+          import time
+          import sys
+          import urllib.request
+          from urllib.error import HTTPError, URLError
+
+          url, token = sys.argv[1:3]
+          headers = {"Accept": "application/json"}
+          if token:
+              headers["Authorization"] = f"Bearer {token}"
+          request = urllib.request.Request(url, headers=headers, method="GET")
+
+          last_error = None
+          for attempt in range(1, 11):
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      status_code = response.status
+                      raw = response.read().decode("utf-8")
+                  break
+              except HTTPError as exc:
+                  status_code = exc.code
+                  raw = exc.read().decode("utf-8")
+                  break
+              except (ConnectionError, TimeoutError, URLError, OSError) as exc:
+                  last_error = exc
+                  if attempt == 10:
+                      raise
+                  time.sleep(min(attempt, 5))
+          else:
+              raise SystemExit(f"HTTP health smoke failed: {last_error}")
+
+          if status_code != 200:
+              raise SystemExit(f"HTTP health returned {status_code}: {raw}")
+          health = json.loads(raw)
+          if health.get("status") not in ("ok", "degraded"):
+              raise SystemExit(f"Unexpected health status: {health}")
+          print(json.dumps({
+              "status": health.get("status"),
+              "version": health.get("version"),
+              "checks": health.get("checks", {}),
+          }, ensure_ascii=False))
+          PY
+            else
+              echo "Unsupported smoke type: ${smoke_type}" >&2
+              exit 1
+            fi
           fi
 
           echo "Deployment complete: ${CONTAINER_NAME} -> ${actual_image}"

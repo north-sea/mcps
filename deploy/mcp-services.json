@@ -14,6 +14,9 @@
         "composeFile": "docker-compose.yml",
         "composeService": "hermes-db-mcp",
         "containerName": "hermes-db-mcp",
+        "requiredEnv": [
+          "PG_DSN"
+        ],
         "migration": {
           "entrypoint": "alembic",
           "command": "upgrade head"
@@ -35,6 +38,33 @@
           ]
         }
       }
+    },
+    "wechat-draft": {
+      "image": "ghcr.io/north-sea/wechat-draft-mcp",
+      "context": ".",
+      "dockerfile": "packages/wechat-draft/Dockerfile",
+      "platforms": ["linux/amd64"],
+      "test": {
+        "workingDirectory": ".",
+        "command": "corepack enable\ncorepack prepare pnpm@8.6.10 --activate\npnpm install --frozen-lockfile\npnpm --filter @mcps/wechat-draft build\npnpm --filter @mcps/wechat-draft test"
+      },
+      "deploy": {
+        "composeProjectDir": "/vol1/1000/Docker/wechat-draft-mcp",
+        "composeFile": "docker-compose.yml",
+        "composeService": "wechat-draft-mcp",
+        "containerName": "wechat-draft-mcp",
+        "requiredEnv": [
+          "WECHAT_DRAFT_AUTH_TOKEN",
+          "HERMES_DB_BASE_URL",
+          "HERMES_DB_AUTH_TOKEN",
+          "WECHAT_ADAPTER_BASE_URL",
+          "WECHAT_ADAPTER_AUTH_TOKEN"
+        ],
+      "health": {
+        "type": "http-health",
+        "url": "http://127.0.0.1:3012/health"
+      }
     }
+  }
   }
 }

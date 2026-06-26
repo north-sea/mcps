@@ -1,0 +1,43 @@
+services:
+  wechat-draft-mcp:
+    image: wechat-draft-mcp:local
+    build:
+      context: ../..
+      dockerfile: packages/wechat-draft/Dockerfile
+    container_name: wechat-draft-mcp
+    restart: unless-stopped
+    ports:
+      - "${WECHAT_DRAFT_HTTP_BIND:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      LOG_LEVEL: info
+      AUTH_TOKEN: ${WECHAT_DRAFT_AUTH_TOKEN:-}
+      HERMES_DB_BASE_URL: ${HERMES_DB_BASE_URL:-http://hermes-db-mcp:8080}
+      HERMES_DB_AUTH_TOKEN: ${HERMES_DB_AUTH_TOKEN:-}
+      WECHAT_ADAPTER_BASE_URL: ${WECHAT_ADAPTER_BASE_URL:-http://wechat-draft-adapter:3000}
+      WECHAT_ADAPTER_AUTH_TOKEN: ${WECHAT_ADAPTER_AUTH_TOKEN:-}
+      WECHAT_DRAFT_CONFIG_PATH: /app/config/accounts.yaml
+      WECHAT_DRAFT_RUNTIME_PATH: /app/data
+      DATABASE_PATH: /app/data/jobs.db
+      ASSET_ROOT: /app/data/assets
+      HEALTH_PROBE_INTERVAL_MS: "30000"
+    volumes:
+      - wechat-draft-data:/app/data
+      - ./config/accounts.yaml:/app/config/accounts.yaml:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const port=process.env.PORT||3001; fetch('http://127.0.0.1:'+port+'/health').then((r)=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  wechat-draft-data:

@@ -19,7 +19,7 @@ const DEFAULT_CONFIG_PATH = resolve(
   '../../config/accounts.yaml'
 );
 
-const metadataSchema = z.record(z.unknown()).optional();
+const metadataSchema = z.record(z.string(), z.unknown()).optional();
 const accountIdSchema = z
   .string()
   .regex(ACCOUNT_ID_PATTERN, 'must be lowercase ASCII and env-safe: ^[a-z][a-z0-9_]*$');
@@ -78,15 +78,16 @@ const hermesDbConfigSchema = z
     base_url: z.string().min(1).default('http://100.113.231.101:8765'),
     timeout_ms: z.coerce.number().int().positive().default(10000),
   })
-  .strict()
-  .default({});
+  .strict();
 
 const serviceConfigFileSchema = z
   .object({
     accounts: z.array(accountConfigSchema).min(1),
     adapters: z.array(adapterConfigSchema).min(1),
     credentials: z.array(credentialConfigSchema).default([]),
-    hermes_db: hermesDbConfigSchema,
+    hermes_db: hermesDbConfigSchema
+      .optional()
+      .default({ base_url: 'http://100.113.231.101:8765', timeout_ms: 10000 }),
     runtime_path: z.string().optional(),
   })
   .strict();
@@ -146,10 +147,15 @@ export class ConfigLoader {
 
     const config: ServiceConfig = {
       accounts: parsed.data.accounts,
-      adapters: parsed.data.adapters,
+      adapters: parsed.data.adapters.map((adapter) => ({
+        ...adapter,
+        base_url: process.env.WECHAT_ADAPTER_BASE_URL || adapter.base_url,
+        auth_ref: process.env.WECHAT_ADAPTER_AUTH_REF || adapter.auth_ref,
+      })),
       credentials: parsed.data.credentials,
       hermes_db: {
         ...parsed.data.hermes_db,
+        base_url: process.env.HERMES_DB_BASE_URL || parsed.data.hermes_db.base_url,
         auth_token: process.env.HERMES_DB_AUTH_TOKEN,
       },
       runtime_path: process.env.WECHAT_DRAFT_RUNTIME_PATH || parsed.data.runtime_path,

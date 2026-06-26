@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import 'dotenv/config';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { createServer } from './server.js';
 
 async function main() {
-  const server: McpServer = createServer();
+  const server: McpServer = await createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('WeChat Draft MCP Server running on stdio');

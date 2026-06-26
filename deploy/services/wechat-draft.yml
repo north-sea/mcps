@@ -1,0 +1,35 @@
+services:
+  wechat-draft-mcp:
+    image: ${REGISTRY:-ghcr.io/north-sea}/wechat-draft-mcp:${TAG:?set TAG to a concrete version like v0.2.0}
+    container_name: wechat-draft-mcp
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      LOG_LEVEL: ${WECHAT_DRAFT_LOG_LEVEL:-info}
+      AUTH_TOKEN: ${WECHAT_DRAFT_AUTH_TOKEN:?set WECHAT_DRAFT_AUTH_TOKEN}
+      HERMES_DB_BASE_URL: ${HERMES_DB_BASE_URL:?set HERMES_DB_BASE_URL}
+      HERMES_DB_AUTH_TOKEN: ${HERMES_DB_AUTH_TOKEN:?set HERMES_DB_AUTH_TOKEN}
+      WECHAT_ADAPTER_BASE_URL: ${WECHAT_ADAPTER_BASE_URL:?set WECHAT_ADAPTER_BASE_URL}
+      WECHAT_ADAPTER_AUTH_TOKEN: ${WECHAT_ADAPTER_AUTH_TOKEN:?set WECHAT_ADAPTER_AUTH_TOKEN}
+      WECHAT_DRAFT_CONFIG_PATH: /app/config/accounts.yaml
+      WECHAT_DRAFT_RUNTIME_PATH: /app/data
+      DATABASE_PATH: /app/data/jobs.db
+      ASSET_ROOT: /app/data/assets
+      HEALTH_PROBE_INTERVAL_MS: "30000"
+    volumes:
+      - wechat-draft-data:/app/data
+      - ${WECHAT_DRAFT_CONFIG_FILE:?set WECHAT_DRAFT_CONFIG_FILE to accounts.yaml path}:/app/config/accounts.yaml:ro
+    ports:
+      - "${WECHAT_DRAFT_HTTP_BIND:-3012}:3001"
+    restart: unless-stopped
+    pull_policy: always
+    networks:
+      - proxy
+
+volumes:
+  wechat-draft-data:
+
+networks:
+  proxy:
+    external: true
