@@ -93,7 +93,7 @@
 1. **[US3-1] 容器健康检查**
    **Given** wechat-draft-mcp 容器运行中，所有依赖可达
    **When** Docker 执行 healthcheck（使用容器内 Node fetch 调用 `http://127.0.0.1:3001/health`）
-   **Then** 返回 200，`{"status":"ok","version":"0.2.0","checks":{"runtime_writable":true,"config_loaded":true,"adapter_reachable":true,"hermes_db_reachable":true}}`
+   **Then** 返回 200，`{"status":"ok","version":"0.2.1","checks":{"runtime_writable":true,"config_loaded":true,"adapter_reachable":true,"hermes_db_reachable":true}}`
 
 2. **[US3-2] 部分依赖故障**
    **Given** adapter 不可达
@@ -251,7 +251,7 @@
 ```yaml
 services:
   wechat-draft-mcp:
-    image: ghcr.io/north-sea/wechat-draft-mcp:v0.2.0
+    image: ghcr.io/north-sea/wechat-draft-mcp:v0.2.1
     container_name: wechat-draft-mcp
     restart: unless-stopped
     ports:

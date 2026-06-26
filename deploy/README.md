@@ -67,15 +67,15 @@ git push origin hermes-db-v0.1.1
 ## 发布 wechat-draft
 
 ```bash
-git tag wechat-draft-v0.2.0
-git push origin wechat-draft-v0.2.0
+git tag wechat-draft-v0.2.1
+git push origin wechat-draft-v0.2.1
 ```
 
 触发后 workflow 会：
 
 1. 在仓库根目录安装 pnpm workspace 依赖并运行 `@mcps/wechat-draft` build/test。
 2. 使用 `packages/wechat-draft/Dockerfile` 从仓库根 context 构建镜像。
-3. 推送 `ghcr.io/north-sea/wechat-draft-mcp:v0.2.0`。
+3. 推送 `ghcr.io/north-sea/wechat-draft-mcp:v0.2.1`。
 4. 在 NAS self-hosted runner 上拉取精确版本并重启 `wechat-draft-mcp`。
 5. 调用 `GET /health`，接受 `status=ok` 或 `status=degraded`，但本地 runtime/config/SQLite 故障导致的 `503` 会失败。
 

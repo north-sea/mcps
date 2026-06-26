@@ -33,7 +33,7 @@ test('sendHealthResponse ends without body for HEAD health', async () => {
 function makeSnapshot(status: HealthSnapshot['status']): HealthSnapshot {
   return {
     status,
-    version: '0.2.0',
+    version: '0.2.1',
     checks: {
       config_loaded: true,
       runtime_writable: status !== 'unhealthy',

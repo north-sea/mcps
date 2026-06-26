@@ -142,6 +142,7 @@ jobs:
         env:
           SERVICE_NAME: ${{ needs.resolve.outputs.service }}
           VERSION: ${{ needs.resolve.outputs.version }}
+          TAG: ${{ needs.resolve.outputs.version }}
           IMAGE_REF: ${{ needs.resolve.outputs.image_ref }}
           COMPOSE_PROJECT_DIR: ${{ needs.resolve.outputs.compose_project_dir }}
           COMPOSE_FILE: ${{ needs.resolve.outputs.compose_file }}

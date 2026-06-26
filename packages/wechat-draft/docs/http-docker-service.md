@@ -12,14 +12,14 @@
 正式部署沿用 `hermes-db` 的平台发布链路：打服务级 Git tag，GitHub Actions 构建并推送 GHCR 镜像，NAS self-hosted runner 拉取精确版本并重启 compose service。
 
 ```bash
-git tag wechat-draft-v0.2.0
-git push origin wechat-draft-v0.2.0
+git tag wechat-draft-v0.2.1
+git push origin wechat-draft-v0.2.1
 ```
 
 发布镜像：
 
 ```text
-ghcr.io/north-sea/wechat-draft-mcp:v0.2.0
+ghcr.io/north-sea/wechat-draft-mcp:v0.2.1
 ```
 
 发布参数登记在 `deploy/mcp-services.json`，NAS 公共 compose 模板在 `deploy/services/wechat-draft.yml`。本包目录内的 `docker-compose.example.yml` 只用于本地或手工 smoke。

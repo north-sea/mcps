@@ -52,12 +52,12 @@
         "composeProjectDir": "/vol1/1000/Docker/wechat-draft-mcp",
         "composeFile": "docker-compose.yml",
         "composeService": "wechat-draft-mcp",
-        "containerName": "wechat-draft-mcp",
-        "requiredEnv": [
-          "WECHAT_DRAFT_AUTH_TOKEN",
-          "HERMES_DB_BASE_URL",
-          "HERMES_DB_AUTH_TOKEN",
-          "WECHAT_ADAPTER_BASE_URL",
+      "containerName": "wechat-draft-mcp",
+      "requiredEnv": [
+        "AUTH_TOKEN",
+        "HERMES_DB_BASE_URL",
+        "HERMES_DB_AUTH_TOKEN",
+        "WECHAT_ADAPTER_BASE_URL",
           "WECHAT_ADAPTER_AUTH_TOKEN"
         ],
       "health": {
