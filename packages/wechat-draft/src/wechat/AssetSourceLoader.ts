@@ -15,7 +15,11 @@
 
 import { readFile, realpath } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
-import { AssetUsage, AssetSourceType } from '../schemas/tool-schemas.js';
+import {
+  AssetUsage,
+  type AssetPreflightOutput,
+  AssetSourceType,
+} from '../schemas/tool-schemas.js';
 
 // ============================================================================
 // Constants
@@ -56,6 +60,29 @@ export interface AssetSourceLoaderConfig {
   assetRoot?: string;
 }
 
+export interface AssetUsageConstraints {
+  max_bytes: number;
+  mime_types: string[];
+  source_types: AssetSourceType[];
+  wechat_api: string;
+  media_type?: string;
+}
+
+export interface AssetSourceConstraints {
+  assets: {
+    body_image: AssetUsageConstraints;
+    cover_image: AssetUsageConstraints;
+    local_path: {
+      enabled: boolean;
+      accepted_path_prefixes: string[];
+    };
+    remote_url: {
+      enabled: boolean;
+      protocols: Array<'http' | 'https'>;
+    };
+  };
+}
+
 export class AssetSourceError extends Error {
   constructor(
     message: string,
@@ -80,6 +107,35 @@ export class AssetSourceLoader {
       process.env.WECHAT_DRAFT_ASSET_ROOT ||
       process.env.ASSET_ROOT ||
       undefined;
+  }
+
+  getConstraints(): AssetSourceConstraints {
+    return getAssetSourceConstraints(this.assetRoot);
+  }
+
+  async preflight(input: AssetSourceInput): Promise<AssetPreflightOutput> {
+    const constraints = getAssetUsageConstraints(input.usage);
+    try {
+      const loaded = await this.load(input);
+      return this.toPreflightResult(input, constraints, {
+        filename: loaded.filename,
+        mimeType: loaded.mimeType,
+        sizeBytes: loaded.sizeBytes,
+      });
+    } catch (error) {
+      if (error instanceof AssetSourceError) {
+        return this.toPreflightErrorResult(input, constraints, error);
+      }
+      return this.toPreflightErrorResult(
+        input,
+        constraints,
+        new AssetSourceError(
+          'Asset preflight failed',
+          'ASSET_SOURCE_INVALID',
+          { error: error instanceof Error ? error.message : String(error) }
+        )
+      );
+    }
   }
 
   async load(input: AssetSourceInput): Promise<LoadedAsset> {
@@ -252,37 +308,110 @@ export class AssetSourceLoader {
 
     if (usage === 'body_image') {
       // body_image: jpg/jpeg/png, max 1MB
-      if (!MIME_WHITELIST_BODY_IMAGE.includes(normalizedMime)) {
+      const constraints = WECHAT_ASSET_USAGE_CONSTRAINTS.body_image;
+      if (!constraints.mime_types.includes(normalizedMime)) {
         throw new AssetSourceError(
           `body_image requires jpg/jpeg/png, got: ${normalizedMime}`,
           'ASSET_FORMAT_UNSUPPORTED',
-          { usage, mimeType: normalizedMime, allowed: MIME_WHITELIST_BODY_IMAGE }
+          { usage, mimeType: normalizedMime, allowed: constraints.mime_types }
         );
       }
-      if (sizeBytes > SIZE_LIMIT_BODY_IMAGE) {
+      if (sizeBytes > constraints.max_bytes) {
         throw new AssetSourceError(
           `body_image size ${sizeBytes} bytes exceeds 1MB limit`,
           'ASSET_SIZE_EXCEEDED',
-          { usage, sizeBytes, limit: SIZE_LIMIT_BODY_IMAGE }
+          { usage, sizeBytes, limit: constraints.max_bytes }
         );
       }
     } else if (usage === 'cover_image') {
       // cover_image: JPG only, max 64KB (WeChat thumb material requirement)
-      if (!MIME_WHITELIST_COVER_IMAGE.includes(normalizedMime)) {
+      const constraints = WECHAT_ASSET_USAGE_CONSTRAINTS.cover_image;
+      if (!constraints.mime_types.includes(normalizedMime)) {
         throw new AssetSourceError(
           `cover_image requires jpg/jpeg (WeChat thumb material), got: ${normalizedMime}`,
           'ASSET_FORMAT_UNSUPPORTED',
-          { usage, mimeType: normalizedMime, allowed: MIME_WHITELIST_COVER_IMAGE }
+          { usage, mimeType: normalizedMime, allowed: constraints.mime_types }
         );
       }
-      if (sizeBytes > SIZE_LIMIT_COVER_IMAGE) {
+      if (sizeBytes > constraints.max_bytes) {
         throw new AssetSourceError(
           `cover_image size ${sizeBytes} bytes exceeds 64KB limit (WeChat thumb material)`,
           'ASSET_SIZE_EXCEEDED',
-          { usage, sizeBytes, limit: SIZE_LIMIT_COVER_IMAGE }
+          { usage, sizeBytes, limit: constraints.max_bytes }
         );
       }
     }
+  }
+
+  private toPreflightResult(
+    input: AssetSourceInput,
+    constraints: AssetUsageConstraints,
+    detected: { filename: string; mimeType: string; sizeBytes: number }
+  ): AssetPreflightOutput {
+    const issues = validateDetectedAsset(input.usage, detected.sizeBytes, detected.mimeType);
+    return {
+      valid: issues.length === 0,
+      upload_ready: issues.length === 0,
+      usage: input.usage,
+      source_type: input.source_type,
+      filename: detected.filename,
+      mime_type: normalizeMime(detected.mimeType),
+      size_bytes: detected.sizeBytes,
+      constraints,
+      source_diagnostics: this.sourceDiagnostics(input, true),
+      issues,
+      recommendations: recommendationFor(input.usage, issues, constraints),
+    };
+  }
+
+  private toPreflightErrorResult(
+    input: AssetSourceInput,
+    constraints: AssetUsageConstraints,
+    error: AssetSourceError
+  ): AssetPreflightOutput {
+    const detectedSize = numberDetail(error.details, 'sizeBytes') ?? numberDetail(error.details, 'size');
+    const detectedMime = stringDetail(error.details, 'mimeType');
+    const issues = [
+      {
+        code: error.code,
+        message: error.message,
+        severity: 'error' as const,
+      },
+    ];
+
+    return {
+      valid: false,
+      upload_ready: false,
+      usage: input.usage,
+      source_type: input.source_type,
+      filename: input.filename,
+      mime_type: detectedMime ? normalizeMime(detectedMime) : input.mime_type,
+      size_bytes: detectedSize,
+      constraints,
+      source_diagnostics: this.sourceDiagnostics(input, false, error),
+      issues,
+      recommendations: recommendationFor(input.usage, issues, constraints),
+    };
+  }
+
+  private sourceDiagnostics(
+    input: AssetSourceInput,
+    ok: boolean,
+    error?: AssetSourceError
+  ): AssetPreflightOutput['source_diagnostics'] {
+    if (input.source_type === 'local_path') {
+      return {
+        readable: ok,
+        accepted_path_prefixes: this.assetRoot ? [this.assetRoot] : [],
+      };
+    }
+
+    return {
+      fetch_ok: ok,
+      status: numberDetail(error?.details, 'status'),
+      status_text: stringDetail(error?.details, 'statusText'),
+      protocols: ['http', 'https'],
+    };
   }
 
   private extractFilename(path: string): string {
@@ -310,6 +439,151 @@ export class AssetSourceLoader {
     }
     return 'application/octet-stream';
   }
+}
+
+export function getAssetUsageConstraints(usage: AssetUsage): AssetUsageConstraints {
+  const constraints = WECHAT_ASSET_USAGE_CONSTRAINTS[usage];
+  return {
+    ...constraints,
+    mime_types: [...constraints.mime_types],
+    source_types: [...constraints.source_types],
+  };
+}
+
+const ASSET_SOURCE_TYPES: AssetSourceType[] = ['local_path', 'remote_url'];
+
+const WECHAT_ASSET_USAGE_CONSTRAINTS: Record<AssetUsage, AssetUsageConstraints> = {
+  body_image: {
+    max_bytes: SIZE_LIMIT_BODY_IMAGE,
+    mime_types: MIME_WHITELIST_BODY_IMAGE,
+    source_types: ASSET_SOURCE_TYPES,
+    wechat_api: '/cgi-bin/media/uploadimg',
+  },
+  cover_image: {
+    max_bytes: SIZE_LIMIT_COVER_IMAGE,
+    mime_types: MIME_WHITELIST_COVER_IMAGE,
+    source_types: ASSET_SOURCE_TYPES,
+    wechat_api: '/cgi-bin/material/add_material?type=thumb',
+    media_type: 'thumb',
+  },
+};
+
+export function getAssetSourceConstraints(assetRoot?: string): AssetSourceConstraints {
+  return {
+    assets: {
+      body_image: {
+        ...WECHAT_ASSET_USAGE_CONSTRAINTS.body_image,
+        mime_types: [...WECHAT_ASSET_USAGE_CONSTRAINTS.body_image.mime_types],
+        source_types: [...WECHAT_ASSET_USAGE_CONSTRAINTS.body_image.source_types],
+      },
+      cover_image: {
+        ...WECHAT_ASSET_USAGE_CONSTRAINTS.cover_image,
+        mime_types: [...WECHAT_ASSET_USAGE_CONSTRAINTS.cover_image.mime_types],
+        source_types: [...WECHAT_ASSET_USAGE_CONSTRAINTS.cover_image.source_types],
+      },
+      local_path: {
+        enabled: Boolean(assetRoot),
+        accepted_path_prefixes: assetRoot ? [assetRoot] : [],
+      },
+      remote_url: {
+        enabled: true,
+        protocols: ['http', 'https'],
+      },
+    },
+  };
+}
+
+function validateDetectedAsset(
+  usage: AssetUsage,
+  sizeBytes: number,
+  mimeType: string
+): AssetPreflightOutput['issues'] {
+  const constraints = getAssetUsageConstraints(usage);
+  const normalizedMime = normalizeMime(mimeType);
+  const issues: AssetPreflightOutput['issues'] = [];
+
+  if (!constraints.mime_types.includes(normalizedMime)) {
+    issues.push({
+      code: 'ASSET_FORMAT_UNSUPPORTED',
+      message: `${usage} requires ${constraints.mime_types.join(', ')}, got: ${normalizedMime}`,
+      severity: 'error',
+    });
+  }
+
+  if (sizeBytes > constraints.max_bytes) {
+    issues.push({
+      code: 'ASSET_SIZE_EXCEEDED',
+      message: `${usage} size ${sizeBytes} bytes exceeds ${constraints.max_bytes} byte limit`,
+      severity: 'error',
+    });
+  }
+
+  return issues;
+}
+
+function recommendationFor(
+  usage: AssetUsage,
+  issues: AssetPreflightOutput['issues'],
+  constraints: AssetUsageConstraints
+): AssetPreflightOutput['recommendations'] {
+  if (issues.length === 0) {
+    return [
+      {
+        action: 'none',
+        reason: 'Asset already satisfies current WeChat constraints.',
+        supported_in_mvp: true,
+      },
+    ];
+  }
+
+  return issues.map((issue) => {
+    if (issue.code === 'ASSET_SIZE_EXCEEDED') {
+      return {
+        action: 'compress' as const,
+        reason: `${usage} is too large. Compress or resize externally, then retry preflight/upload.`,
+        target_max_bytes: constraints.max_bytes,
+        target_mime_types: constraints.mime_types,
+        supported_in_mvp: false,
+      };
+    }
+
+    if (issue.code === 'ASSET_FORMAT_UNSUPPORTED') {
+      return {
+        action: 'convert_format' as const,
+        reason: `${usage} uses an unsupported MIME type. Convert to one of the allowed formats.`,
+        target_mime_types: constraints.mime_types,
+        supported_in_mvp: false,
+      };
+    }
+
+    if (issue.code === 'ASSET_SOURCE_INVALID' || issue.code === 'ASSET_FILE_NOT_READABLE') {
+      return {
+        action: 'use_accepted_path_or_remote_url' as const,
+        reason: 'Use a local path under the accepted asset root, or provide a reachable remote_url.',
+        supported_in_mvp: true,
+      };
+    }
+
+    return {
+      action: 'replace_asset' as const,
+      reason: 'Replace the asset or fix the source before retrying.',
+      supported_in_mvp: true,
+    };
+  });
+}
+
+function normalizeMime(value: string): string {
+  return value.toLowerCase().split(';')[0].trim();
+}
+
+function numberDetail(details: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = details?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function stringDetail(details: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = details?.[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 function isPathInside(rootPath: string, candidatePath: string): boolean {

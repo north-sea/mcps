@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import type { EcsWechatAdapterConfig } from '../config/types.js';
 import type { WorkflowArtifact, HermesDbClient } from '../hermes/HermesDbClient.js';
 import { SQLiteJobStore } from '../store/SQLiteJobStore.js';
+import { ErrorCode } from '../schemas/result-types.js';
+import { AdapterUnreachableError } from '../wechat/WechatAdapterClient.js';
 import { DraftWorkflow } from './DraftWorkflow.js';
 
 test('DraftWorkflow creates a draft once and returns existing job for duplicate idempotency key', async () => {
@@ -68,6 +70,95 @@ test('DraftWorkflow creates a draft once and returns existing job for duplicate 
   }
 });
 
+test('DraftWorkflow returns actionable error for content_ref-only artifacts', async () => {
+  const { store, cleanup } = await createStore();
+  const hermesDbClient = {
+    async getArtifact() {
+      return makeArtifact({
+        content_text: undefined,
+        content_ref: 's3://bucket/article.html',
+      });
+    },
+    async upsertArticleLedger() {
+      throw new Error('ledger should not be called');
+    },
+  } as unknown as HermesDbClient;
+  const workflow = new DraftWorkflow({
+    adapterClientFactory: () => ({
+      async checkHealth() {
+        return undefined;
+      },
+      async createDraft() {
+        throw new Error('createDraft should not be called');
+      },
+    }),
+  });
+
+  try {
+    const job = await workflow.execute({
+      account: 'xiaban',
+      artifactId: 'artifact_1',
+      idempotencyKey: 'idem_content_ref',
+      hermesDbClient,
+      adapterConfig: makeAdapterConfig(),
+      jobStore: store,
+    });
+
+    assert.equal(job.status, 'invalid_artifact');
+    assert.equal(job.error?.code, ErrorCode.ARTIFACT_VALIDATION_FAILED);
+    assert.equal(job.error?.current_phase, 'payload_build');
+    assert.equal(job.error?.next_action, 're_upsert_inline_content_text');
+    assert.equal(job.error?.retryable, false);
+    assert.match(job.error?.message || '', /content_ref is not supported/);
+    assert.doesNotMatch(job.error?.message || '', /T013/);
+  } finally {
+    store.close();
+    await cleanup();
+  }
+});
+
+test('DraftWorkflow marks adapter connectivity failures as retryable and phase-aware', async () => {
+  const { store, cleanup } = await createStore();
+  const hermesDbClient = {
+    async getArtifact() {
+      return makeArtifact();
+    },
+    async upsertArticleLedger() {
+      throw new Error('ledger should not be called');
+    },
+  } as unknown as HermesDbClient;
+  const workflow = new DraftWorkflow({
+    adapterClientFactory: () => ({
+      async checkHealth() {
+        throw new AdapterUnreachableError('http://127.0.0.1:3000', new Error('adapter offline'));
+      },
+      async createDraft() {
+        throw new Error('createDraft should not be called');
+      },
+    }),
+  });
+
+  try {
+    const job = await workflow.execute({
+      account: 'xiaban',
+      artifactId: 'artifact_1',
+      idempotencyKey: 'idem_adapter_unreachable',
+      hermesDbClient,
+      adapterConfig: makeAdapterConfig(),
+      jobStore: store,
+    });
+
+    assert.equal(job.status, 'needs_operator_action');
+    assert.equal(job.error?.code, ErrorCode.ADAPTER_UNREACHABLE);
+    assert.equal(job.error?.current_phase, 'adapter_check');
+    assert.equal(job.error?.next_action, 'check_adapter_connectivity');
+    assert.equal(job.error?.retryable, true);
+  } finally {
+    store.close();
+    await cleanup();
+  }
+});
+
 async function createStore(): Promise<{
   store: SQLiteJobStore;
   cleanup: () => Promise<void>;
@@ -82,8 +173,8 @@ async function createStore(): Promise<{
   };
 }
 
-function makeArtifact(): WorkflowArtifact {
-  return {
+function makeArtifact(overrides: Partial<WorkflowArtifact> = {}): WorkflowArtifact {
+  const artifact: WorkflowArtifact = {
     artifact_id: 'artifact_1',
     run_id: 'run_1',
     account: 'xiaban',
@@ -105,6 +196,10 @@ function makeArtifact(): WorkflowArtifact {
     },
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
+  };
+  return {
+    ...artifact,
+    ...overrides,
   };
 }
 

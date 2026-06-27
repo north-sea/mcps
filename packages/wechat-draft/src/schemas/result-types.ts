@@ -31,8 +31,19 @@ export const ErrorResultSchema = z.object({
     code: z.string(),
     message: z.string(),
     details: z.record(z.string(), z.unknown()).optional(),
+    next_action: z.string().optional(),
+    remediation_hint: z.string().optional(),
+    retryable: z.boolean().optional(),
+    current_phase: z.string().optional(),
   }),
 });
+
+export type ErrorContext = {
+  next_action?: string;
+  remediation_hint?: string;
+  retryable?: boolean;
+  current_phase?: string;
+};
 
 export type ErrorResult = {
   success: false;
@@ -40,6 +51,10 @@ export type ErrorResult = {
     code: string;
     message: string;
     details?: Record<string, unknown>;
+    next_action?: string;
+    remediation_hint?: string;
+    retryable?: boolean;
+    current_phase?: string;
   };
 };
 
@@ -116,10 +131,16 @@ export function createSuccessResult<T>(data: T): SuccessResult<T> {
 export function createErrorResult(
   code: ErrorCodeType,
   message: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  context: ErrorContext = {}
 ): ErrorResult {
   return {
     success: false,
-    error: { code, message, details },
+    error: {
+      code,
+      message,
+      details,
+      ...context,
+    },
   };
 }

@@ -45,7 +45,15 @@ export class DraftPayloadBuilder {
     const metadata = artifact.metadata as ArtifactMetadata;
 
     // Extract content
-    const content = this.extractContent(artifact);
+    const contentResult = this.extractContent(artifact);
+    if (!contentResult.success) {
+      return {
+        success: false,
+        errors: [contentResult.error],
+      };
+    }
+
+    const content = contentResult.content;
     if (!content) {
       return {
         success: false,
@@ -119,20 +127,26 @@ export class DraftPayloadBuilder {
   /**
    * Extract content from artifact (content_text preferred over content_ref).
    */
-  private extractContent(artifact: WorkflowArtifact): string | null {
+  private extractContent(artifact: WorkflowArtifact):
+    | { success: true; content: string | null }
+    | { success: false; error: { field: string; issue: string } } {
     if (artifact.content_text) {
-      return artifact.content_text;
+      return { success: true, content: artifact.content_text };
     }
 
     // TODO: support content_ref (e.g., S3 URL or file path)
     // For MVP, only content_text is supported
     if (artifact.content_ref) {
-      throw new Error(
-        'content_ref is not yet supported; artifact must provide content_text (T013 limitation)'
-      );
+      return {
+        success: false,
+        error: {
+          field: 'content_ref',
+          issue: 'content_ref is not supported by wechat_create_draft; provide inline content_text',
+        },
+      };
     }
 
-    return null;
+    return { success: true, content: null };
   }
 
   /**

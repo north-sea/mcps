@@ -1,5 +1,6 @@
 import {
   type ErrorCodeType,
+  type ErrorContext,
   type Result,
   ErrorCode,
   createErrorResult,
@@ -21,7 +22,8 @@ export function mapOperationalErrorToResult<T>(error: unknown): Result<T> | null
     return createErrorResult(
       normalizeAssetErrorCode(error.code),
       error.message || 'Asset source error',
-      error.details
+      sanitizeAssetDetails(error.details),
+      getAssetErrorContext(error.code)
     );
   }
 
@@ -29,7 +31,8 @@ export function mapOperationalErrorToResult<T>(error: unknown): Result<T> | null
     return createErrorResult(
       normalizeAdapterErrorCode(error.code),
       error.message || 'Adapter error',
-      sanitizeAdapterDetails(error.details)
+      sanitizeAdapterDetails(error.details),
+      getAdapterErrorContext(error.code)
     );
   }
 
@@ -67,6 +70,107 @@ function sanitizeAdapterDetails(
   details: Record<string, unknown> | undefined
 ): Record<string, unknown> | undefined {
   return details?.account ? { account: details.account } : undefined;
+}
+
+function sanitizeAssetDetails(
+  details: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (!details) {
+    return undefined;
+  }
+
+  const allowedKeys = [
+    'usage',
+    'source_type',
+    'sizeBytes',
+    'size',
+    'limit',
+    'mimeType',
+    'allowed',
+    'status',
+    'statusText',
+  ];
+  const sanitized: Record<string, unknown> = {};
+  for (const key of allowedKeys) {
+    if (key in details) {
+      sanitized[key] = details[key];
+    }
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+function getAssetErrorContext(code: string | undefined): ErrorContext {
+  switch (normalizeAssetErrorCode(code)) {
+    case ErrorCode.ASSET_SIZE_EXCEEDED:
+      return {
+        next_action: 'resize_or_compress_asset',
+        remediation_hint: 'Use wechat_list_accounts to inspect image size constraints, then retry with a smaller image.',
+        retryable: false,
+        current_phase: 'asset_preflight',
+      };
+    case ErrorCode.ASSET_FORMAT_UNSUPPORTED:
+      return {
+        next_action: 'convert_asset_format',
+        remediation_hint: 'Use one of the MIME types returned by wechat_list_accounts for this asset usage.',
+        retryable: false,
+        current_phase: 'asset_preflight',
+      };
+    case ErrorCode.ASSET_SOURCE_INVALID:
+    case ErrorCode.ASSET_FILE_NOT_READABLE:
+      return {
+        next_action: 'fix_asset_source',
+        remediation_hint: 'For local_path, use a path under the accepted prefixes returned by wechat_list_accounts, or use remote_url.',
+        retryable: false,
+        current_phase: 'asset_loading',
+      };
+    case ErrorCode.ASSET_REMOTE_URL_FETCH_FAILED:
+      return {
+        next_action: 'retry_or_replace_remote_url',
+        remediation_hint: 'Verify the remote image URL is reachable from the MCP runtime, or upload from local_path.',
+        retryable: true,
+        current_phase: 'asset_loading',
+      };
+    default:
+      return {
+        next_action: 'inspect_asset_error',
+        retryable: false,
+        current_phase: 'asset_loading',
+      };
+  }
+}
+
+function getAdapterErrorContext(code: string | undefined): ErrorContext {
+  switch (normalizeAdapterErrorCode(code)) {
+    case ErrorCode.ADAPTER_UNREACHABLE:
+    case ErrorCode.ADAPTER_TIMEOUT:
+      return {
+        next_action: 'check_adapter_connectivity',
+        remediation_hint: 'Check the ECS adapter endpoint, network path, and health status before retrying.',
+        retryable: true,
+        current_phase: 'adapter_call',
+      };
+    case ErrorCode.ADAPTER_AUTH_FAILED:
+      return {
+        next_action: 'check_adapter_credentials',
+        remediation_hint: 'Verify adapter auth configuration and token references.',
+        retryable: false,
+        current_phase: 'adapter_call',
+      };
+    case ErrorCode.ADAPTER_CAPABILITY_MISSING:
+      return {
+        next_action: 'check_adapter_capabilities',
+        remediation_hint: 'Call wechat_list_accounts and ensure the selected account/adapter supports the requested capability.',
+        retryable: false,
+        current_phase: 'adapter_call',
+      };
+    default:
+      return {
+        next_action: 'inspect_adapter_error',
+        retryable: false,
+        current_phase: 'adapter_call',
+      };
+  }
 }
 
 function isOperationalErrorLike(error: unknown): error is OperationalErrorLike {

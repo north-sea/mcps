@@ -18,7 +18,12 @@ test('toMcpToolResult wraps success result as text JSON', () => {
 
 test('toMcpToolResult marks error results as MCP errors', () => {
   const mcpResult = toMcpToolResult(
-    createErrorResult(ErrorCode.ACCOUNT_NOT_FOUND, 'Account not found')
+    createErrorResult(ErrorCode.ACCOUNT_NOT_FOUND, 'Account not found', undefined, {
+      next_action: 'choose_enabled_account',
+      remediation_hint: 'Call wechat_list_accounts and retry with an enabled account.',
+      retryable: false,
+      current_phase: 'account_resolution',
+    })
   );
 
   assert.equal(mcpResult.isError, true);
@@ -27,6 +32,10 @@ test('toMcpToolResult marks error results as MCP errors', () => {
     error: {
       code: ErrorCode.ACCOUNT_NOT_FOUND,
       message: 'Account not found',
+      next_action: 'choose_enabled_account',
+      remediation_hint: 'Call wechat_list_accounts and retry with an enabled account.',
+      retryable: false,
+      current_phase: 'account_resolution',
     },
   });
 });

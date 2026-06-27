@@ -20,7 +20,7 @@ import {
 import type { DraftJobStore } from '../store/types.js';
 import { DraftJob, DraftJobStatus } from '../schemas/tool-schemas.js';
 import { EcsWechatAdapterConfig } from '../config/types.js';
-import { ErrorCode } from '../schemas/result-types.js';
+import { type ErrorContext, ErrorCode } from '../schemas/result-types.js';
 
 export interface DraftWorkflowContext {
   account: string;
@@ -80,13 +80,35 @@ export class DraftWorkflow {
       job = await this.updateJob(job, 'artifact_validation', ctx.jobStore);
       const artifact = await ctx.hermesDbClient.getArtifact(ctx.artifactId);
       if (!artifact) {
-        return await this.failJob(job, 'invalid_artifact', ErrorCode.ARTIFACT_NOT_FOUND, 'Artifact not found', ctx.jobStore);
+        return await this.failJob(
+          job,
+          'invalid_artifact',
+          ErrorCode.ARTIFACT_NOT_FOUND,
+          'Artifact not found',
+          ctx.jobStore,
+          {
+            next_action: 'upsert_publish_ready_artifact',
+            remediation_hint: 'Create or upsert the publish_ready artifact before calling wechat_create_draft.',
+            retryable: false,
+          }
+        );
       }
 
       const validationResult = this.validator.validate(artifact);
       if (!validationResult.valid) {
         const errorMessage = validationResult.errors.map((e) => `${e.field}: ${e.issue}`).join('; ');
-        return await this.failJob(job, 'invalid_artifact', ErrorCode.ARTIFACT_VALIDATION_FAILED, errorMessage, ctx.jobStore);
+        return await this.failJob(
+          job,
+          'invalid_artifact',
+          ErrorCode.ARTIFACT_VALIDATION_FAILED,
+          errorMessage,
+          ctx.jobStore,
+          {
+            next_action: 'fix_publish_ready_artifact',
+            remediation_hint: 'Fix the artifact fields reported by validation_errors, then retry with the same artifact_id or a new version.',
+            retryable: false,
+          }
+        );
       }
 
       // Extract title for job metadata
@@ -105,7 +127,12 @@ export class DraftWorkflow {
             'needs_operator_action',
             ErrorCode.ADAPTER_UNREACHABLE,
             'Adapter unreachable. Check Tailscale/WireGuard/SSH tunnel.',
-            ctx.jobStore
+            ctx.jobStore,
+            {
+              next_action: 'check_adapter_connectivity',
+              remediation_hint: 'Check adapter health, network path, and service reachability before retrying.',
+              retryable: true,
+            }
           );
         }
         if (error instanceof AdapterAuthError) {
@@ -114,7 +141,12 @@ export class DraftWorkflow {
             'needs_operator_action',
             ErrorCode.ADAPTER_AUTH_FAILED,
             'Adapter auth failed. Check ADAPTER_AUTH_TOKEN.',
-            ctx.jobStore
+            ctx.jobStore,
+            {
+              next_action: 'check_adapter_credentials',
+              remediation_hint: 'Verify ADAPTER_AUTH_TOKEN and adapter auth_ref configuration.',
+              retryable: false,
+            }
           );
         }
         throw error;
@@ -125,7 +157,25 @@ export class DraftWorkflow {
       const payloadResult = this.payloadBuilder.buildPayload(artifact);
       if (!payloadResult.success || !payloadResult.payload) {
         const errorMessage = payloadResult.errors?.map((e) => `${e.field}: ${e.issue}`).join('; ') || 'Payload build failed';
-        return await this.failJob(job, 'invalid_artifact', ErrorCode.ARTIFACT_VALIDATION_FAILED, errorMessage, ctx.jobStore);
+        const isContentRefOnly = payloadResult.errors?.some((error) => error.field === 'content_ref');
+        return await this.failJob(
+          job,
+          'invalid_artifact',
+          ErrorCode.ARTIFACT_VALIDATION_FAILED,
+          errorMessage,
+          ctx.jobStore,
+          isContentRefOnly
+            ? {
+                next_action: 're_upsert_inline_content_text',
+                remediation_hint: 'wechat_create_draft currently requires inline content_text. Re-upsert the artifact with rendered HTML in content_text.',
+                retryable: false,
+              }
+            : {
+                next_action: 'fix_publish_ready_artifact',
+                remediation_hint: 'Fix the payload build errors and retry draft creation.',
+                retryable: false,
+              }
+        );
       }
 
       // Step 4: Draft creating
@@ -140,7 +190,12 @@ export class DraftWorkflow {
             'failed',
             ErrorCode.WECHAT_API_ERROR,
             'Draft creation failed: no media_id returned',
-            ctx.jobStore
+            ctx.jobStore,
+            {
+              next_action: 'inspect_adapter_response',
+              remediation_hint: 'Check ECS adapter logs and WeChat draft_add response for why media_id was missing.',
+              retryable: false,
+            }
           );
         }
 
@@ -185,7 +240,12 @@ export class DraftWorkflow {
             'needs_operator_action',
             ErrorCode.WECHAT_TOKEN_INVALID,
             `WeChat token error [${error.errcode}]: ${error.errmsg}. Check ECS adapter credentials.`,
-            ctx.jobStore
+            ctx.jobStore,
+            {
+              next_action: 'refresh_wechat_credentials',
+              remediation_hint: 'Refresh or reconfigure the WeChat token used by the ECS adapter.',
+              retryable: false,
+            }
           );
         }
 
@@ -197,7 +257,12 @@ export class DraftWorkflow {
               'needs_operator_action',
               ErrorCode.WECHAT_RATE_LIMIT,
               `WeChat API rate limit [${error.errcode}]: ${error.errmsg}. Wait and retry later.`,
-              ctx.jobStore
+              ctx.jobStore,
+              {
+                next_action: 'retry_after_rate_limit',
+                remediation_hint: 'Wait for the WeChat API rate limit window to reset before retrying.',
+                retryable: true,
+              }
             );
           }
 
@@ -208,7 +273,12 @@ export class DraftWorkflow {
               'needs_operator_action',
               ErrorCode.WECHAT_PERMISSION_DENIED,
               `WeChat permission denied [${error.errcode}]: ${error.errmsg}. Check account permissions.`,
-              ctx.jobStore
+              ctx.jobStore,
+              {
+                next_action: 'check_wechat_permissions',
+                remediation_hint: 'Verify the account has draft/material API permissions and IP whitelist configuration.',
+                retryable: false,
+              }
             );
           }
 
@@ -219,7 +289,12 @@ export class DraftWorkflow {
               'invalid_artifact',
               ErrorCode.WECHAT_ASSET_INVALID,
               `WeChat asset error [${error.errcode}]: ${error.errmsg}. Check thumb_media_id or content format.`,
-              ctx.jobStore
+              ctx.jobStore,
+              {
+                next_action: 'fix_wechat_asset_references',
+                remediation_hint: 'Re-upload invalid cover/body assets and update the publish_ready artifact.',
+                retryable: false,
+              }
             );
           }
 
@@ -229,7 +304,11 @@ export class DraftWorkflow {
             'failed',
             ErrorCode.WECHAT_API_ERROR,
             `WeChat API error [${error.errcode}]: ${error.errmsg}`,
-            ctx.jobStore
+            ctx.jobStore,
+            {
+              next_action: 'inspect_wechat_api_error',
+              retryable: false,
+            }
           );
         }
 
@@ -239,7 +318,12 @@ export class DraftWorkflow {
             'needs_operator_action',
             ErrorCode.ADAPTER_UNREACHABLE,
             'Adapter unreachable during draft creation. Check network connectivity.',
-            ctx.jobStore
+            ctx.jobStore,
+            {
+              next_action: 'check_adapter_connectivity',
+              remediation_hint: 'Check adapter health, network path, and service reachability before retrying.',
+              retryable: true,
+            }
           );
         }
 
@@ -249,7 +333,11 @@ export class DraftWorkflow {
           'failed',
           ErrorCode.INTERNAL_ERROR,
           error instanceof Error ? error.message : 'Unknown error during draft creation',
-          ctx.jobStore
+          ctx.jobStore,
+          {
+            next_action: 'inspect_internal_error',
+            retryable: false,
+          }
         );
       }
     } catch (error) {
@@ -258,7 +346,11 @@ export class DraftWorkflow {
         'failed',
         ErrorCode.INTERNAL_ERROR,
         error instanceof Error ? error.message : 'Unknown error',
-        ctx.jobStore
+        ctx.jobStore,
+        {
+          next_action: 'inspect_internal_error',
+          retryable: false,
+        }
       );
     }
   }
@@ -284,7 +376,8 @@ export class DraftWorkflow {
     status: DraftJobStatus,
     errorCode: string,
     errorMessage: string,
-    jobStore: DraftJobStore
+    jobStore: DraftJobStore,
+    context: ErrorContext = {}
   ): Promise<DraftJob> {
     const failedJob: DraftJob = {
       ...job,
@@ -292,6 +385,8 @@ export class DraftWorkflow {
       error: {
         code: errorCode,
         message: errorMessage,
+        current_phase: context.current_phase || job.status,
+        ...context,
       },
       updated_at: new Date().toISOString(),
     };

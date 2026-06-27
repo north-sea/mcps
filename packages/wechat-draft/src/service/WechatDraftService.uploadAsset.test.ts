@@ -13,6 +13,25 @@ import { AssetSourceLoader } from '../wechat/AssetSourceLoader.js';
 import { AdapterAuthError } from '../wechat/WechatAdapterClient.js';
 import { WechatDraftService } from './WechatDraftService.js';
 
+test('WechatDraftService.listAccounts returns account constraints', async () => {
+  const { service, cleanup } = await createUploadService();
+
+  try {
+    const result = service.listAccounts();
+
+    assert.equal(result.success, true);
+    const account = result.success ? result.data.accounts[0] : undefined;
+    assert.equal(account?.account_id, 'xiaban');
+    assert.equal(account?.constraints?.assets.body_image.max_bytes, 1024 * 1024);
+    assert.deepEqual(account?.constraints?.assets.body_image.source_types, ['local_path', 'remote_url']);
+    assert.equal(account?.constraints?.assets.cover_image.max_bytes, 64 * 1024);
+    assert.equal(account?.constraints?.assets.cover_image.media_type, 'thumb');
+    assert.equal(account?.constraints?.assets.local_path.enabled, true);
+  } finally {
+    await cleanup();
+  }
+});
+
 test('WechatDraftService.uploadAsset returns body image URLs and cover thumb media ids', async () => {
   const { service, writeAsset, cleanup, adapterCalls } = await createUploadService();
 
@@ -83,6 +102,76 @@ test('WechatDraftService.uploadAsset returns asset_size_exceeded before adapter 
     assert.equal(result.success, false);
     assert.equal(result.success ? undefined : result.error.code, ErrorCode.ASSET_SIZE_EXCEEDED);
     assert.equal(adapterCalls.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('WechatDraftService.preflightAsset returns diagnostics without adapter upload', async () => {
+  const { service, writeAsset, cleanup, adapterCalls } = await createUploadService();
+
+  try {
+    await writeAsset('large.jpg', Buffer.alloc(64 * 1024 + 1));
+
+    const result = await service.preflightAsset({
+      usage: 'cover_image',
+      source_type: 'local_path',
+      source: 'large.jpg',
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.success ? result.data.valid : undefined, false);
+    assert.equal(result.success ? result.data.recommendations[0]?.action : undefined, 'compress');
+    assert.equal(adapterCalls.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('WechatDraftService.uploadAsset preflight gate skips adapter on invalid asset', async () => {
+  const { service, writeAsset, cleanup, adapterCalls } = await createUploadService();
+
+  try {
+    await writeAsset('large.jpg', Buffer.alloc(64 * 1024 + 1));
+
+    const result = await service.uploadAsset({
+      account: 'xiaban',
+      usage: 'cover_image',
+      source_type: 'local_path',
+      source: 'large.jpg',
+      preflight: true,
+    });
+
+    assert.equal(result.success, false);
+    assert.equal(result.success ? undefined : result.error.code, ErrorCode.INVALID_INPUT);
+    assert.equal(result.success ? undefined : result.error.next_action, 'compress_or_resize_asset');
+    assert.equal(
+      result.success ? undefined : (result.error.details?.preflight as { valid?: boolean }).valid,
+      false
+    );
+    assert.equal(adapterCalls.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test('WechatDraftService.uploadAsset preflight gate allows valid upload', async () => {
+  const { service, writeAsset, cleanup, adapterCalls } = await createUploadService();
+
+  try {
+    await writeAsset('body.png', Buffer.from([1, 2, 3]));
+
+    const result = await service.uploadAsset({
+      account: 'xiaban',
+      usage: 'body_image',
+      source_type: 'local_path',
+      source: 'body.png',
+      preflight: true,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.success ? result.data.wechat_url : undefined, 'https://mmbiz.qpic.cn/body.png');
+    assert.equal(adapterCalls.length, 1);
   } finally {
     await cleanup();
   }

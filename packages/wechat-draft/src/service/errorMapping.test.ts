@@ -46,6 +46,40 @@ test('mapOperationalErrorToResult sanitizes adapter details', () => {
       details: {
         account: 'xiaban',
       },
+      next_action: 'inspect_adapter_error',
+      retryable: false,
+      current_phase: 'adapter_call',
+    },
+  });
+});
+
+test('mapOperationalErrorToResult adds remediation for asset size failures and redacts source', () => {
+  const result = mapOperationalErrorToResult({
+    name: 'AssetSourceError',
+    code: 'ASSET_SIZE_EXCEEDED',
+    message: 'cover_image size exceeds limit',
+    details: {
+      usage: 'cover_image',
+      sizeBytes: 65537,
+      limit: 65536,
+      path: '/private/tmp/secret/cover.jpg',
+    },
+  });
+
+  assert.deepEqual(result, {
+    success: false,
+    error: {
+      code: ErrorCode.ASSET_SIZE_EXCEEDED,
+      message: 'cover_image size exceeds limit',
+      details: {
+        usage: 'cover_image',
+        sizeBytes: 65537,
+        limit: 65536,
+      },
+      next_action: 'resize_or_compress_asset',
+      remediation_hint: 'Use wechat_list_accounts to inspect image size constraints, then retry with a smaller image.',
+      retryable: false,
+      current_phase: 'asset_preflight',
     },
   });
 });

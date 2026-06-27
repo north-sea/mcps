@@ -37,6 +37,30 @@ export interface AdapterCreateDraftResponse {
   errmsg?: string;
 }
 
+export interface AdapterBatchGetDraftsResponse {
+  success: boolean;
+  account?: string;
+  total_count?: number;
+  item_count?: number;
+  item?: Array<{
+    media_id: string;
+    content?: {
+      news_item?: Array<{
+        title?: string;
+        author?: string;
+        digest?: string;
+        content?: string;
+        content_source_url?: string;
+        thumb_media_id?: string;
+      }>;
+    };
+    update_time?: number;
+  }>;
+  error?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
 export interface AdapterUploadAssetResponse {
   success: boolean;
   account?: string;
@@ -226,6 +250,33 @@ export class WechatAdapterClient {
       // Other adapter error
       throw new AdapterInternalError(
         response.error || 'Draft creation failed',
+        { account, response }
+      );
+    }
+
+    return response;
+  }
+
+  async batchGetDrafts(
+    account: string,
+    request: { offset: number; count: number; no_content: 0 | 1 }
+  ): Promise<AdapterBatchGetDraftsResponse> {
+    const url = `${this.baseUrl}/accounts/${encodeURIComponent(account)}/drafts/batchget`;
+    const response = await this.fetch<AdapterBatchGetDraftsResponse>(url, {
+      method: 'POST',
+      requireAuth: true,
+      body: request,
+    });
+
+    if (!response.success) {
+      if (response.error === 'token_error' && response.errcode && response.errmsg) {
+        throw new AdapterTokenError(account, response.errcode, response.errmsg);
+      }
+      if (response.error === 'wechat_api_error' && response.errcode && response.errmsg) {
+        throw new AdapterWeChatApiError(account, response.errcode, response.errmsg);
+      }
+      throw new AdapterInternalError(
+        response.error || 'Draft batchget failed',
         { account, response }
       );
     }

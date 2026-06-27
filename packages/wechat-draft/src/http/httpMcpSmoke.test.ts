@@ -38,13 +38,42 @@ test('HTTP MCP smoke calls list accounts and create draft through Streamable HTT
   try {
     await client.connect(transport);
 
+    const tools = await client.listTools();
+    const toolNames = tools.tools.map((tool) => tool.name);
+    assert.ok(toolNames.includes('wechat_import_article_markdown'));
+    assert.ok(toolNames.includes('wechat_validate_article_document'));
+    assert.ok(toolNames.includes('wechat_render_article_document'));
+    assert.ok(toolNames.includes('wechat_build_publish_ready_artifact'));
+    assert.ok(toolNames.includes('wechat_preflight_asset'));
+    assert.ok(toolNames.includes('wechat_create_draft_facade'));
+    assert.ok(toolNames.includes('wechat_list_drafts'));
+
     const accounts = await client.callTool({
       name: 'wechat_list_accounts',
       arguments: {},
     });
-    assert.deepEqual(parseToolData<{ accounts: Array<{ account_id: string }> }>(accounts).accounts, [
-      { account_id: 'xiaban', display_name: '下班不躺平', enabled: true, capabilities: ['check_credentials', 'draft_add', 'asset_upload'] },
-    ]);
+    const listedAccounts = parseToolData<{
+      accounts: Array<{
+        account_id: string;
+        display_name: string;
+        enabled: boolean;
+        capabilities?: string[];
+        constraints?: {
+          assets: {
+            body_image: { max_bytes: number };
+            cover_image: { max_bytes: number; media_type?: string };
+          };
+        };
+      }>;
+    }>(accounts).accounts;
+    assert.equal(listedAccounts.length, 1);
+    assert.equal(listedAccounts[0].account_id, 'xiaban');
+    assert.equal(listedAccounts[0].display_name, '下班不躺平');
+    assert.equal(listedAccounts[0].enabled, true);
+    assert.deepEqual(listedAccounts[0].capabilities, ['check_credentials', 'draft_add', 'asset_upload']);
+    assert.equal(listedAccounts[0].constraints?.assets.body_image.max_bytes, 1024 * 1024);
+    assert.equal(listedAccounts[0].constraints?.assets.cover_image.max_bytes, 64 * 1024);
+    assert.equal(listedAccounts[0].constraints?.assets.cover_image.media_type, 'thumb');
 
     const firstDraft = await client.callTool({
       name: 'wechat_create_draft',

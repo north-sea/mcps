@@ -72,6 +72,48 @@ export interface ArticleLedgerUpdate {
   metadata: Record<string, unknown>;
 }
 
+export interface WorkflowRunUpsertInput {
+  run_id: string;
+  phase: string;
+  status: string;
+  task_id?: string;
+  topic_id?: string;
+  account?: string;
+  input_text?: string;
+  intent?: string;
+  current_stage?: string;
+  dry_run?: boolean;
+  metadata?: Record<string, unknown>;
+  started_at?: string;
+}
+
+export interface WorkflowArtifactUpsertInput {
+  run_id: string;
+  stage: string;
+  type: string;
+  name: string;
+  content_hash: string;
+  content_size_bytes: number;
+  artifact_id?: string;
+  task_id?: string;
+  topic_id?: string;
+  account?: string;
+  parent_artifact_id?: string;
+  content_preview?: string;
+  content_text?: string;
+  content_ref?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type WorkflowToolResult = Record<string, unknown> & {
+  error?: string;
+  message?: string;
+  next_action?: string;
+  remediation_hint?: string;
+  retryable?: boolean;
+  current_phase?: string;
+};
+
 // ============================================================================
 // HermesDbClient
 // ============================================================================
@@ -186,6 +228,14 @@ export class HermesDbClient {
         `Failed to get artifact ${artifactId}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  async upsertWorkflowRun(input: WorkflowRunUpsertInput): Promise<WorkflowToolResult> {
+    return await this.callTool<WorkflowToolResult>('upsert_workflow_run', input);
+  }
+
+  async upsertWorkflowArtifact(input: WorkflowArtifactUpsertInput): Promise<WorkflowToolResult> {
+    return await this.callTool<WorkflowToolResult>('upsert_workflow_artifact', input);
   }
 
   /**

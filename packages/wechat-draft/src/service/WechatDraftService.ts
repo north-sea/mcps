@@ -1,21 +1,50 @@
 import { ConfigLoader } from '../config/index.js';
+import { createHash } from 'node:crypto';
 import { HermesDbClient, ArtifactValidator } from '../hermes/index.js';
+import type { WorkflowArtifact } from '../hermes/index.js';
+import {
+  ArticleDocumentToWechatArtifactBuilder,
+  ArticleDocumentValidator,
+  MarkdownArticleExporter,
+  MarkdownArticleImporter,
+  type ArticleDocumentEnvelope,
+  type ArticleDocumentValidationIssue,
+  type ArticleDocumentValidationResult,
+  WechatArticleDocumentRenderer,
+  getWechatStyleProfile,
+} from '../render/index.js';
 import { SQLiteJobStore, type DraftJobStore } from '../store/index.js';
 import { DraftWorkflow } from '../workflow/index.js';
 import { AssetSourceLoader } from '../wechat/AssetSourceLoader.js';
 import { WechatAdapterClient, type AdapterUploadAssetResponse } from '../wechat/WechatAdapterClient.js';
+import { articleDocumentError } from './articleDocumentErrors.js';
 import { mapOperationalErrorToResult } from './errorMapping.js';
 import { HealthMonitor, type HealthSnapshot } from './HealthMonitor.js';
 import {
+  type BuildPublishReadyArtifactInput,
+  type BuildPublishReadyArtifactOutput,
+  type CreateDraftFacadeInput,
+  type CreateDraftFacadeOutput,
   type CreateDraftInput,
   type CreateDraftOutput,
+  type FacadePhase,
   type GetDraftStatusInput,
   type GetDraftStatusOutput,
+  type ImportArticleMarkdownInput,
+  type ImportArticleMarkdownOutput,
+  type ListDraftsInput,
+  type ListDraftsOutput,
+  type AssetPreflightInput,
+  type AssetPreflightOutput,
   type ListAccountsInput,
   type ListAccountsOutput,
+  type RenderArticleDocumentInputTool,
+  type RenderArticleDocumentOutputTool,
   type Result,
   type UploadAssetInput,
   type UploadAssetOutput,
+  type ValidateArticleDocumentInput,
+  type ValidateArticleDocumentOutput,
   type ValidateArtifactInput,
   type ValidateArtifactOutput,
   ErrorCode,
@@ -37,6 +66,29 @@ export interface WechatDraftServiceDependencies {
 }
 
 export interface WechatAssetUploadClient {
+  batchGetDrafts?(
+    account: string,
+    request: { offset: number; count: number; no_content: 0 | 1 }
+  ): Promise<{
+    success: boolean;
+    total_count?: number;
+    item_count?: number;
+    item?: Array<{
+      media_id: string;
+      content?: {
+        news_item?: Array<{
+          title?: string;
+          author?: string;
+          digest?: string;
+          content?: string;
+          content_source_url?: string;
+          thumb_media_id?: string;
+        }>;
+      };
+      update_time?: number;
+    }>;
+  }>;
+
   uploadAsset(
     account: string,
     request: {
@@ -160,6 +212,7 @@ export class WechatDraftService {
             display_name: account.display_name,
             enabled: account.enabled,
             capabilities: this.config.wechat_adapter.capabilities,
+            constraints: this.assetSourceLoader.getConstraints(),
           };
         }),
       });
@@ -241,6 +294,175 @@ export class WechatDraftService {
     }
   }
 
+  async createDraftFacade(
+    input: CreateDraftFacadeInput
+  ): Promise<Result<CreateDraftFacadeOutput>> {
+    const phaseTrace: FacadePhase[] = [];
+    const idempotencyKey =
+      input.idempotency_key ||
+      SQLiteJobStore.generateIdempotencyKey(
+        input.account,
+        input.source_type === 'publish_ready_artifact' ? input.artifact_id : input.publish_artifact_id
+      );
+    let publishArtifactId =
+      input.source_type === 'publish_ready_artifact' ? input.artifact_id : input.publish_artifact_id;
+    let upsertOutcome: Record<string, unknown> | undefined;
+
+    const fail = <T>(
+      phase: FacadePhase['phase'],
+      result: Result<T>,
+      fallbackNextAction: string,
+      fallbackMessage: string
+    ): Result<CreateDraftFacadeOutput> => {
+      setPhase(phaseTrace, phase, 'failed', publishArtifactId, result.success ? fallbackMessage : result.error.message);
+      const error = result.success
+        ? {
+            code: ErrorCode.INTERNAL_ERROR,
+            message: fallbackMessage,
+            next_action: fallbackNextAction,
+            retryable: false,
+            current_phase: phase,
+          }
+        : result.error;
+      return createErrorResult(error.code as typeof ErrorCode[keyof typeof ErrorCode], error.message, {
+        ...(error.details ?? {}),
+        phase_trace: phaseTrace,
+        publish_artifact_id: publishArtifactId,
+        upsert_outcome: upsertOutcome,
+      }, {
+        next_action: error.next_action || fallbackNextAction,
+        remediation_hint: error.remediation_hint,
+        retryable: error.retryable ?? false,
+        current_phase: error.current_phase || phase,
+      });
+    };
+
+    setPhase(phaseTrace, 'input_validation', 'succeeded');
+
+    if (input.source_type === 'article_document') {
+      setPhase(phaseTrace, 'asset_preflight', 'skipped', undefined, 'Prepared WeChat asset IDs/URLs are required; implicit upload/compression is out of scope.');
+
+      setPhase(phaseTrace, 'artifact_build', 'running');
+      const built = this.buildPublishReadyArtifact({
+        article: input.article,
+        artifact_id: input.publish_artifact_id,
+        run_id: input.run_id,
+        account: input.account,
+        task_id: input.task_id,
+        topic_id: input.topic_id,
+        source_artifact_id: input.source_artifact_id,
+        style_profile_id: input.style_profile_id,
+      });
+      if (!built.success) {
+        return fail('artifact_build', built, 'fix_article_document', 'Failed to build publish-ready artifact');
+      }
+      setPhase(phaseTrace, 'artifact_build', 'succeeded', publishArtifactId);
+
+      setPhase(phaseTrace, 'workflow_run_upsert', 'running');
+      try {
+        const runUpsert = await this.hermesDbClient.upsertWorkflowRun({
+          run_id: input.run_id,
+          phase: 'draft',
+          status: 'running',
+          account: input.account,
+          task_id: input.task_id,
+          topic_id: input.topic_id,
+          current_stage: 'publish_ready_facade',
+          metadata: {
+            source: 'wechat_create_draft_facade',
+            source_type: input.source_type,
+          },
+        });
+        if (runUpsert.error) {
+          return this.facadeHermesError('workflow_run_upsert', runUpsert, phaseTrace, publishArtifactId, upsertOutcome);
+        }
+        setPhase(phaseTrace, 'workflow_run_upsert', 'succeeded');
+      } catch (error) {
+        return this.facadeCaughtError('workflow_run_upsert', error, phaseTrace, publishArtifactId, upsertOutcome);
+      }
+
+      setPhase(phaseTrace, 'artifact_upsert', 'running', publishArtifactId);
+      try {
+        const artifactUpsert = await this.hermesDbClient.upsertWorkflowArtifact(built.data.upsert_payload);
+        upsertOutcome = artifactUpsert;
+        if (artifactUpsert.error) {
+          return this.facadeHermesError('artifact_upsert', artifactUpsert, phaseTrace, publishArtifactId, upsertOutcome);
+        }
+        setPhase(phaseTrace, 'artifact_upsert', 'succeeded', publishArtifactId);
+      } catch (error) {
+        return this.facadeCaughtError('artifact_upsert', error, phaseTrace, publishArtifactId, upsertOutcome);
+      }
+    } else {
+      setPhase(phaseTrace, 'asset_preflight', 'skipped');
+      setPhase(phaseTrace, 'artifact_build', 'skipped', publishArtifactId);
+      setPhase(phaseTrace, 'workflow_run_upsert', 'skipped');
+      setPhase(phaseTrace, 'artifact_upsert', 'skipped', publishArtifactId);
+    }
+
+    setPhase(phaseTrace, 'publish_validation', 'running', publishArtifactId);
+    const validation = await this.validatePublishArtifact({
+      account: input.account,
+      artifact_id: publishArtifactId,
+    });
+    if (!validation.success) {
+      return fail('publish_validation', validation, 'fix_publish_ready_artifact', 'Publish-ready artifact validation failed');
+    }
+    if (!validation.data.valid) {
+      setPhase(phaseTrace, 'publish_validation', 'failed', publishArtifactId, 'Publish-ready artifact validation failed');
+      return createErrorResult(ErrorCode.ARTIFACT_VALIDATION_FAILED, 'Publish-ready artifact validation failed', {
+        validation_summary: validation.data,
+        phase_trace: phaseTrace,
+        publish_artifact_id: publishArtifactId,
+        upsert_outcome: upsertOutcome,
+      }, {
+        next_action: 'fix_publish_ready_artifact',
+        remediation_hint: 'Fix validation_errors and retry the facade with the same publish artifact id or a new version.',
+        retryable: false,
+        current_phase: 'publish_validation',
+      });
+    }
+    setPhase(phaseTrace, 'publish_validation', 'succeeded', publishArtifactId);
+
+    setPhase(phaseTrace, 'draft_create', 'running', publishArtifactId);
+    const draft = await this.createDraft({
+      account: input.account,
+      artifact_id: publishArtifactId,
+      idempotency_key: idempotencyKey,
+    });
+    if (!draft.success) {
+      return fail('draft_create', draft, 'inspect_draft_create_error', 'Draft creation failed');
+    }
+    if (draft.data.status !== 'saved') {
+      setPhase(phaseTrace, 'draft_create', 'failed', publishArtifactId, draft.data.error?.message || `Draft status ${draft.data.status}`);
+      return createErrorResult(draft.data.error?.code as typeof ErrorCode[keyof typeof ErrorCode] || ErrorCode.WECHAT_API_ERROR, draft.data.error?.message || `Draft status ${draft.data.status}`, {
+        draft: draft.data,
+        validation_summary: validation.data,
+        phase_trace: phaseTrace,
+        publish_artifact_id: publishArtifactId,
+        upsert_outcome: upsertOutcome,
+      }, {
+        next_action: draft.data.error?.next_action || 'inspect_draft_status',
+        remediation_hint: draft.data.error?.remediation_hint,
+        retryable: draft.data.error?.retryable ?? false,
+        current_phase: draft.data.error?.current_phase || 'draft_create',
+      });
+    }
+    setPhase(phaseTrace, 'draft_create', 'succeeded', publishArtifactId);
+
+    return createSuccessResult({
+      account: input.account,
+      source_type: input.source_type,
+      idempotency_key: idempotencyKey,
+      publish_artifact_id: publishArtifactId,
+      current_phase: 'draft_create',
+      completed_phases: completedPhases(phaseTrace),
+      phase_trace: phaseTrace,
+      validation_summary: validation.data,
+      upsert_outcome: upsertOutcome,
+      draft: draft.data,
+    });
+  }
+
   async getDraftStatus(input: GetDraftStatusInput): Promise<Result<GetDraftStatusOutput>> {
     if (!input.job_id && !input.artifact_id) {
       return createErrorResult(
@@ -275,6 +497,217 @@ export class WechatDraftService {
     }
   }
 
+  async listDrafts(input: ListDraftsInput): Promise<Result<ListDraftsOutput>> {
+    const resolved = this.resolveAccountAdapter(input.account, 'draft_batchget');
+    if (!resolved.success) {
+      return resolved;
+    }
+
+    try {
+      const adapterClient = this.adapterClientFactory(resolved.data.adapterConfig);
+      if (!adapterClient.batchGetDrafts) {
+        return createErrorResult(
+          ErrorCode.ADAPTER_CAPABILITY_MISSING,
+          'WeChat adapter client does not implement draft_batchget',
+          { capability: 'draft_batchget' },
+          {
+            next_action: 'upgrade_wechat_draft_adapter_client',
+            remediation_hint: 'Deploy an adapter client build that supports draft batchget before calling wechat_list_drafts.',
+            retryable: false,
+            current_phase: 'draft_list',
+          }
+        );
+      }
+      const response = await adapterClient.batchGetDrafts(input.account, {
+        offset: input.offset,
+        count: input.count,
+        no_content: input.include_content ? 0 : 1,
+      });
+
+      return createSuccessResult({
+        account: input.account,
+        total_count: response.total_count,
+        item_count: response.item_count,
+        offset: input.offset,
+        count: input.count,
+        include_content: input.include_content,
+        items: (response.item || []).map((item) => {
+          const article = item.content?.news_item?.[0] || {};
+          const content = input.include_content ? article.content : undefined;
+          return {
+            media_id: item.media_id,
+            update_time: item.update_time,
+            title: article.title,
+            author: article.author,
+            digest: article.digest,
+            thumb_media_id: article.thumb_media_id,
+            content_source_url: article.content_source_url,
+            content_preview: content ? toPreviewText(content) : undefined,
+            content,
+          };
+        }),
+      });
+    } catch (error) {
+      return this.mapOperationalError(error);
+    }
+  }
+
+  async preflightAsset(input: AssetPreflightInput): Promise<Result<AssetPreflightOutput>> {
+    try {
+      const preflight = await this.assetSourceLoader.preflight(input);
+      return createSuccessResult(preflight);
+    } catch (error) {
+      return this.internalError(error);
+    }
+  }
+
+  importArticleMarkdown(
+    input: ImportArticleMarkdownInput
+  ): Result<ImportArticleMarkdownOutput> {
+    try {
+      const importer = new MarkdownArticleImporter();
+      const validator = new ArticleDocumentValidator();
+      const article = importer.import(input);
+      const validation = validator.validate(article);
+
+      return createSuccessResult({
+        article,
+        content_text: input.return_content_text ? JSON.stringify(article) : undefined,
+        validation: {
+          valid: validation.valid,
+          errors: validation.errors,
+        },
+      });
+    } catch (error) {
+      return articleDocumentError(error, 'article_import');
+    }
+  }
+
+  validateArticleDocument(
+    input: ValidateArticleDocumentInput
+  ): Result<ValidateArticleDocumentOutput> {
+    const normalized = normalizeArticleDocumentInput(input.article);
+    if (!normalized.success) {
+      return normalized;
+    }
+
+    const validator = new ArticleDocumentValidator();
+    const validation = validator.validate(normalized.data);
+    return createSuccessResult({
+      valid: validation.valid,
+      schema_version: normalized.data.schema_version,
+      errors: validation.errors,
+      article: input.return_normalized ? normalized.data : undefined,
+    });
+  }
+
+  renderArticleDocument(
+    input: RenderArticleDocumentInputTool
+  ): Result<RenderArticleDocumentOutputTool> {
+    const normalized = normalizeArticleDocumentInput(input.article);
+    if (!normalized.success) {
+      return normalized;
+    }
+
+    try {
+      const article = normalized.data;
+      const outputFormat = input.output_format ?? 'html';
+      if (outputFormat === 'markdown') {
+        const exported = new MarkdownArticleExporter().exportMarkdown(article);
+        return createSuccessResult({
+          output_format: 'markdown',
+          markdown: exported.markdown,
+          content_hash: hashContent(exported.markdown),
+          content_size_bytes: Buffer.byteLength(exported.markdown, 'utf8'),
+          preview_text: toPreviewText(exported.markdown),
+          consumed_body_images: [],
+          warnings: exported.warnings,
+        });
+      }
+
+      const styleProfileId = input.style_profile_id || article.style_profile_id || 'yueliang.default';
+      const renderer = new WechatArticleDocumentRenderer(getWechatStyleProfile(styleProfileId));
+      const rendered = renderer.render({
+        article: {
+          ...article,
+          style_profile_id: styleProfileId,
+        },
+        include_cover_image: input.include_cover_image ?? false,
+      });
+
+      return createSuccessResult({
+        output_format: 'html',
+        html: rendered.html,
+        content_hash: hashContent(rendered.html),
+        content_size_bytes: Buffer.byteLength(rendered.html, 'utf8'),
+        preview_text: toPreviewText(rendered.html),
+        consumed_body_images: rendered.consumed_body_images,
+        warnings: [],
+      });
+    } catch (error) {
+      return articleDocumentError(error, 'article_render');
+    }
+  }
+
+  buildPublishReadyArtifact(
+    input: BuildPublishReadyArtifactInput
+  ): Result<BuildPublishReadyArtifactOutput> {
+    const normalized = normalizeArticleDocumentInput(input.article);
+    if (!normalized.success) {
+      return normalized;
+    }
+
+    try {
+      const article = normalized.data;
+      const sourceArtifactId = input.source_artifact_id || `${input.artifact_id}:article_document`;
+      const source: WorkflowArtifact = {
+        artifact_id: sourceArtifactId,
+        run_id: input.run_id,
+        task_id: input.task_id,
+        topic_id: input.topic_id,
+        account: input.account,
+        stage: 'draft',
+        type: 'article_document',
+        name: `${article.title} - Article Document`,
+        content_hash: hashContent(JSON.stringify(article)),
+        content_size_bytes: Buffer.byteLength(JSON.stringify(article), 'utf8'),
+        content_preview: article.title,
+        content_text: JSON.stringify(article),
+        metadata: {
+          title: article.title,
+          style_profile_id: article.style_profile_id,
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const built = new ArticleDocumentToWechatArtifactBuilder().build({
+        source,
+        article,
+        style_profile_id: input.style_profile_id,
+      });
+
+      return createSuccessResult({
+        upsert_payload: {
+          artifact_id: input.artifact_id,
+          run_id: built.run_id,
+          task_id: built.task_id,
+          topic_id: built.topic_id,
+          account: built.account,
+          stage: 'publish_ready',
+          type: 'wechat_api_article',
+          name: built.name,
+          content_hash: built.content_hash,
+          content_size_bytes: built.content_size_bytes,
+          content_preview: built.content_preview,
+          content_text: built.content_text as string,
+          metadata: built.metadata,
+        },
+      });
+    } catch (error) {
+      return articleDocumentError(error, 'article_build');
+    }
+  }
+
   async uploadAsset(input: UploadAssetInput): Promise<Result<UploadAssetOutput>> {
     const resolved = this.resolveAccountAdapter(input.account, 'asset_upload');
     if (!resolved.success) {
@@ -282,6 +715,23 @@ export class WechatDraftService {
     }
 
     try {
+      if (input.preflight) {
+        const preflight = await this.assetSourceLoader.preflight(input);
+        if (!preflight.valid) {
+          return createErrorResult(
+            ErrorCode.INVALID_INPUT,
+            'Asset preflight failed',
+            { preflight },
+            {
+              next_action: nextActionFromPreflight(preflight),
+              remediation_hint: 'Fix the asset source or transform it according to preflight recommendations, then retry upload.',
+              retryable: false,
+              current_phase: 'asset_preflight',
+            }
+          );
+        }
+      }
+
       const loadedAsset = await this.assetSourceLoader.load({
         usage: input.usage,
         source_type: input.source_type,
@@ -347,6 +797,48 @@ export class WechatDraftService {
     return mapOperationalErrorToResult<T>(error) || this.internalError(error);
   }
 
+  private facadeHermesError(
+    phase: FacadePhase['phase'],
+    result: Record<string, unknown>,
+    phaseTrace: FacadePhase[],
+    publishArtifactId: string,
+    upsertOutcome: Record<string, unknown> | undefined
+  ): Result<CreateDraftFacadeOutput> {
+    const message = typeof result.message === 'string' ? result.message : `Hermes ${phase} failed`;
+    setPhase(phaseTrace, phase, 'failed', publishArtifactId, message);
+    return createErrorResult(ErrorCode.HERMES_DB_UPSERT_FAILED, message, {
+      hermes_error: result,
+      phase_trace: phaseTrace,
+      publish_artifact_id: publishArtifactId,
+      upsert_outcome: upsertOutcome,
+    }, {
+      next_action: typeof result.next_action === 'string' ? result.next_action : 'inspect_hermes_upsert_error',
+      remediation_hint: typeof result.remediation_hint === 'string' ? result.remediation_hint : undefined,
+      retryable: typeof result.retryable === 'boolean' ? result.retryable : false,
+      current_phase: phase,
+    });
+  }
+
+  private facadeCaughtError(
+    phase: FacadePhase['phase'],
+    error: unknown,
+    phaseTrace: FacadePhase[],
+    publishArtifactId: string,
+    upsertOutcome: Record<string, unknown> | undefined
+  ): Result<CreateDraftFacadeOutput> {
+    const message = error instanceof Error ? error.message : `Hermes ${phase} failed`;
+    setPhase(phaseTrace, phase, 'failed', publishArtifactId, message);
+    return createErrorResult(ErrorCode.HERMES_DB_UPSERT_FAILED, message, {
+      phase_trace: phaseTrace,
+      publish_artifact_id: publishArtifactId,
+      upsert_outcome: upsertOutcome,
+    }, {
+      next_action: 'check_hermes_db_connectivity',
+      retryable: true,
+      current_phase: phase,
+    });
+  }
+
   private internalError<T>(error: unknown): Result<T> {
     return createErrorResult(
       ErrorCode.INTERNAL_ERROR,
@@ -376,4 +868,93 @@ async function checkAdapter(adapterConfig: EcsWechatAdapterConfig): Promise<{ ok
       error: error instanceof Error ? error.message : 'Unknown adapter health error',
     };
   }
+}
+
+function normalizeArticleDocumentInput(
+  value: unknown
+): Result<ArticleDocumentEnvelope> {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    const validator = new ArticleDocumentValidator();
+    const validation: ArticleDocumentValidationResult = validator.validate(parsed);
+    if (!validation.valid) {
+      const details = {
+        errors: validation.errors.map((error: ArticleDocumentValidationIssue) => ({
+          field: error.field,
+          issue: error.issue,
+        })),
+      };
+      return createErrorResult(
+        ErrorCode.INVALID_INPUT,
+        'Invalid article_document',
+        details,
+        {
+          next_action: 'fix_article_document',
+          remediation_hint: 'Fix the article_document validation errors and retry.',
+          retryable: false,
+          current_phase: 'article_validation',
+        }
+      );
+    }
+
+    return createSuccessResult(parsed as ArticleDocumentEnvelope);
+  } catch (error) {
+    return articleDocumentError(error, 'article_validation');
+  }
+}
+
+function hashContent(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function toPreviewText(value: string): string {
+  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function nextActionFromPreflight(preflight: AssetPreflightOutput): string {
+  const firstRecommendation = preflight.recommendations[0];
+  if (!firstRecommendation) {
+    return 'inspect_asset_preflight';
+  }
+
+  switch (firstRecommendation.action) {
+    case 'compress':
+      return 'compress_or_resize_asset';
+    case 'convert_format':
+      return 'convert_asset_format';
+    case 'use_accepted_path_or_remote_url':
+      return 'use_accepted_path_or_remote_url';
+    case 'replace_asset':
+      return 'replace_asset';
+    case 'none':
+    default:
+      return 'inspect_asset_preflight';
+  }
+}
+
+function setPhase(
+  trace: FacadePhase[],
+  phase: FacadePhase['phase'],
+  status: FacadePhase['status'],
+  artifactId?: string,
+  message?: string
+): void {
+  const existing = trace.find((entry) => entry.phase === phase);
+  const next = {
+    phase,
+    status,
+    artifact_id: artifactId,
+    message,
+  };
+
+  if (existing) {
+    Object.assign(existing, next);
+    return;
+  }
+
+  trace.push(next);
+}
+
+function completedPhases(trace: FacadePhase[]): string[] {
+  return trace.filter((entry) => entry.status === 'succeeded').map((entry) => entry.phase);
 }
