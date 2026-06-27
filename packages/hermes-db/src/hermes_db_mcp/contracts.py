@@ -262,6 +262,10 @@ class ToolError(TypedDict):
     message: NotRequired[str]
     field: NotRequired[str]
     details: NotRequired[dict]
+    next_action: NotRequired[str]
+    remediation_hint: NotRequired[str]
+    retryable: NotRequired[bool]
+    current_phase: NotRequired[str]
 
 
 # ============================================================================
@@ -1762,7 +1766,13 @@ def validate_policy_application_query(
 
 
 def error(
-    code: str, field: str | None = None, details: dict | None = None
+    code: str,
+    field: str | None = None,
+    details: dict | None = None,
+    next_action: str | None = None,
+    remediation_hint: str | None = None,
+    retryable: bool | None = None,
+    current_phase: str | None = None,
 ) -> ToolError:
     """
     构造标准错误结果
@@ -1780,4 +1790,12 @@ def error(
         result["field"] = field
     if details:
         result["details"] = details
+    if next_action:
+        result["next_action"] = next_action
+    if remediation_hint:
+        result["remediation_hint"] = remediation_hint
+    if retryable is not None:
+        result["retryable"] = retryable
+    if current_phase:
+        result["current_phase"] = current_phase
     return result

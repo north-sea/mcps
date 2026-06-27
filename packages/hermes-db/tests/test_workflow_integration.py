@@ -32,7 +32,7 @@ async def test_workflow_run_and_artifact_roundtrip(db_pool):
         assert run["run_id"] == run_id
         assert run["created"] is True
 
-        artifact, created = await workflow_repo.upsert_artifact(
+        artifact, created, outcome = await workflow_repo.upsert_artifact(
             db_pool,
             artifact_id=artifact_id,
             run_id=run_id,
@@ -47,6 +47,7 @@ async def test_workflow_run_and_artifact_roundtrip(db_pool):
         )
 
         assert created is True
+        assert outcome["idempotency_hit"] is False
         assert artifact["version"] == 1
 
         listed = await workflow_repo.list_artifacts(db_pool, run_id=run_id)

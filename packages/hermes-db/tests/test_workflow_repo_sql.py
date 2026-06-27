@@ -26,6 +26,27 @@ class FakeConnection:
 
     async def fetchrow(self, sql, *params):
         self.fetchrow_calls.append((sql, params))
+        if "WHERE artifact_id = $1" in sql and "content_text" in sql:
+            return {
+                "artifact_id": params[0],
+                "run_id": "run-1",
+                "task_id": None,
+                "topic_id": None,
+                "account": None,
+                "stage": "draft",
+                "type": "draft",
+                "name": "draft",
+                "version": 1,
+                "parent_artifact_id": None,
+                "content_hash": "sha256:abc",
+                "content_size_bytes": 7,
+                "content_preview": None,
+                "content_ref": None,
+                "content_text": "# Draft",
+                "metadata": {},
+                "created_at": None,
+                "updated_at": None,
+            }
         if "INSERT INTO hermes.workflow_artifacts" in sql:
             return {
                 "artifact_id": params[0],
@@ -50,6 +71,28 @@ class FakeConnection:
 
     async def fetch(self, sql, *params):
         self.fetch_calls.append((sql, params))
+        if "FROM hermes.workflow_artifacts" in sql and "ORDER BY version" in sql:
+            return [
+                {
+                    "artifact_id": "artifact-1",
+                    "run_id": params[0],
+                    "task_id": None,
+                    "topic_id": None,
+                    "account": None,
+                    "stage": params[1],
+                    "type": "draft",
+                    "name": params[2],
+                    "version": 1,
+                    "parent_artifact_id": None,
+                    "content_hash": "sha256:abc",
+                    "content_size_bytes": 7,
+                    "content_preview": None,
+                    "content_ref": None,
+                    "metadata": {},
+                    "created_at": None,
+                    "updated_at": None,
+                }
+            ]
         return []
 
     async def fetchval(self, sql, *params):
@@ -80,7 +123,7 @@ class FakePool:
 async def test_upsert_artifact_uses_advisory_lock_and_version_query():
     pool = FakePool()
 
-    row, created = await workflow_repo.upsert_artifact(
+    row, created, outcome = await workflow_repo.upsert_artifact(
         pool,
         artifact_id="artifact-1",
         run_id="run-1",
@@ -93,6 +136,8 @@ async def test_upsert_artifact_uses_advisory_lock_and_version_query():
     )
 
     assert created is True
+    assert outcome["idempotency_hit"] is False
+    assert outcome["provided_content_hash"] == "sha256:abc"
     assert row["version"] == 1
     assert "pg_advisory_xact_lock" in pool.conn.execute_calls[0][0]
     assert "max(version)" in pool.conn.fetchval_calls[0][0]
@@ -119,3 +164,46 @@ async def test_list_artifacts_builds_parameterized_filters():
     assert "LIMIT $4 OFFSET $5" in sql
     assert params == ("run-1", "account-a", "draft", 10, 5)
     assert "content_text" not in sql
+
+
+@pytest.mark.asyncio
+async def test_list_artifact_versions_resolves_artifact_selector_and_orders_by_version():
+    pool = FakePool()
+
+    rows, selector = await workflow_repo.list_artifact_versions(
+        pool,
+        artifact_id="artifact-1",
+        order="desc",
+        limit=10,
+        offset=0,
+    )
+
+    assert selector == {
+        "artifact_id": "artifact-1",
+        "run_id": "run-1",
+        "stage": "draft",
+        "name": "draft",
+    }
+    sql, params = pool.conn.fetch_calls[0]
+    assert "WHERE run_id = $1 AND stage = $2 AND name = $3" in sql
+    assert "ORDER BY version DESC" in sql
+    assert params == ("run-1", "draft", "draft", 10, 0)
+    assert rows[0]["artifact_id"] == "artifact-1"
+
+
+@pytest.mark.asyncio
+async def test_get_latest_artifact_version_uses_desc_limit_one():
+    pool = FakePool()
+
+    row, selector = await workflow_repo.get_latest_artifact_version(
+        pool,
+        run_id="run-1",
+        stage="draft",
+        name="draft",
+    )
+
+    sql, params = pool.conn.fetch_calls[0]
+    assert selector["run_id"] == "run-1"
+    assert "ORDER BY version DESC" in sql
+    assert params == ("run-1", "draft", "draft", 1, 0)
+    assert row["version"] == 1

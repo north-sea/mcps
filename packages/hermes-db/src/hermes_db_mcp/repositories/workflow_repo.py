@@ -28,6 +28,13 @@ def _jsonb(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+class ArtifactIdConflictError(ValueError):
+    def __init__(self, *, existing_content_hash: str, provided_content_hash: str):
+        super().__init__("artifact_id_conflict")
+        self.existing_content_hash = existing_content_hash
+        self.provided_content_hash = provided_content_hash
+
+
 async def upsert_run(
     pool: asyncpg.Pool,
     *,
@@ -145,7 +152,7 @@ async def upsert_artifact(
     content_text: str | None = None,
     content_ref: str | None = None,
     metadata: dict | None = None,
-) -> tuple[dict, bool]:
+) -> tuple[dict, bool, dict]:
     artifact_id = artifact_id or str(uuid4())
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -162,13 +169,21 @@ async def upsert_artifact(
                 artifact_id,
             )
             if existing_by_id and existing_by_id["content_hash"] != content_hash:
-                raise ValueError("artifact_id_conflict")
+                raise ArtifactIdConflictError(
+                    existing_content_hash=existing_by_id["content_hash"],
+                    provided_content_hash=content_hash,
+                )
             if existing_by_id:
                 row = await conn.fetchrow(
                     f"SELECT {ARTIFACT_SUMMARY_COLUMNS} FROM hermes.workflow_artifacts WHERE artifact_id = $1",
                     artifact_id,
                 )
-                return dict(row), False
+                return dict(row), False, {
+                    "idempotency_hit": True,
+                    "skipped_update_reason": "artifact_id_content_hash_match",
+                    "existing_content_hash": existing_by_id["content_hash"],
+                    "provided_content_hash": content_hash,
+                }
 
             existing_by_hash = await conn.fetchrow(
                 f"""
@@ -182,7 +197,12 @@ async def upsert_artifact(
                 content_hash,
             )
             if existing_by_hash:
-                return dict(existing_by_hash), False
+                return dict(existing_by_hash), False, {
+                    "idempotency_hit": True,
+                    "skipped_update_reason": "run_stage_name_content_hash_match",
+                    "existing_content_hash": existing_by_hash["content_hash"],
+                    "provided_content_hash": content_hash,
+                }
 
             version = await conn.fetchval(
                 """
@@ -221,7 +241,10 @@ async def upsert_artifact(
                 content_ref,
                 _jsonb(metadata or {}),
             )
-    return dict(row), True
+    return dict(row), True, {
+        "idempotency_hit": False,
+        "provided_content_hash": content_hash,
+    }
 
 
 async def list_artifacts(
@@ -282,3 +305,95 @@ async def get_artifact(pool: asyncpg.Pool, *, artifact_id: str) -> dict | None:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(sql, artifact_id)
     return _row(row)
+
+
+async def list_artifact_versions(
+    pool: asyncpg.Pool,
+    *,
+    artifact_id: str | None = None,
+    run_id: str | None = None,
+    stage: str | None = None,
+    name: str | None = None,
+    order: str = "asc",
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], dict | None]:
+    selector = await resolve_artifact_family(
+        pool,
+        artifact_id=artifact_id,
+        run_id=run_id,
+        stage=stage,
+        name=name,
+    )
+    if selector is None:
+        return [], None
+
+    direction = "DESC" if order == "desc" else "ASC"
+    sql = f"""
+        SELECT {ARTIFACT_SUMMARY_COLUMNS}
+        FROM hermes.workflow_artifacts
+        WHERE run_id = $1 AND stage = $2 AND name = $3
+        ORDER BY version {direction}, created_at {direction}
+        LIMIT $4 OFFSET $5
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            sql,
+            selector["run_id"],
+            selector["stage"],
+            selector["name"],
+            limit,
+            offset,
+        )
+    return [dict(row) for row in rows], selector
+
+
+async def get_latest_artifact_version(
+    pool: asyncpg.Pool,
+    *,
+    artifact_id: str | None = None,
+    run_id: str | None = None,
+    stage: str | None = None,
+    name: str | None = None,
+) -> tuple[dict | None, dict | None]:
+    versions, selector = await list_artifact_versions(
+        pool,
+        artifact_id=artifact_id,
+        run_id=run_id,
+        stage=stage,
+        name=name,
+        order="desc",
+        limit=1,
+        offset=0,
+    )
+    return (versions[0] if versions else None), selector
+
+
+async def resolve_artifact_family(
+    pool: asyncpg.Pool,
+    *,
+    artifact_id: str | None = None,
+    run_id: str | None = None,
+    stage: str | None = None,
+    name: str | None = None,
+) -> dict | None:
+    if artifact_id:
+        artifact = await get_artifact(pool, artifact_id=artifact_id)
+        if artifact is None:
+            return None
+        return {
+            "artifact_id": artifact["artifact_id"],
+            "run_id": artifact["run_id"],
+            "stage": artifact["stage"],
+            "name": artifact["name"],
+        }
+
+    if run_id and stage and name:
+        return {
+            "artifact_id": None,
+            "run_id": run_id,
+            "stage": stage,
+            "name": name,
+        }
+
+    return None
