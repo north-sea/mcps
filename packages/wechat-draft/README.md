@@ -33,7 +33,6 @@ WeChat Draft MCP Server 提供微信公众号草稿管理能力，通过 [Model 
       "account_id": "xiaban",
       "display_name": "下班不躺平",
       "enabled": true,
-      "adapter_id": "ali-wechat-egress",
       "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"]
     }
   ]

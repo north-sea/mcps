@@ -10,7 +10,7 @@
  *
  * Out of scope for MVP:
  * - publish/mass-send/update/delete tools
- * - alternate write adapters
+ * - alternate write backends
  * - preview tools
  */
 
@@ -48,7 +48,6 @@ export const ListAccountsOutputSchema = z.object({
     account_id: z.string(),
     display_name: z.string(),
     enabled: z.boolean(),
-    adapter_id: z.string(),
     capabilities: z.array(z.string()).optional(),
   })),
 });

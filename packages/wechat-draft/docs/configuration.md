@@ -220,7 +220,7 @@ servers:
 curl http://100.64.0.2:3000/health
 
 # 预期输出：
-# {"status":"ok","capabilities":["check_credentials","draft_add","draft_batchget","asset_upload"],"allowed_accounts":["weiyuchengchun","yueliang","xiaban"]}
+# {"status":"ok","capabilities":["check_credentials","draft_add","draft_batchget","asset_upload"]}
 ```
 
 ---

@@ -15,7 +15,7 @@ import { DraftAddRequest } from './types.js';
 export interface AdapterHealthResponse {
   status: string;
   capabilities: string[];
-  allowed_accounts: string[];
+  allowed_accounts?: string[];
 }
 
 export interface AdapterCheckCredentialsResponse {
@@ -156,9 +156,7 @@ export class WechatAdapterClient {
 
   /**
    * Resolve auth token from auth_ref.
-   * Supports:
-   * - "env:VAR_NAME" -> read from process.env
-   * - Direct string -> use as-is
+   * Supports "env:VAR_NAME" -> read from process.env.
    */
   private resolveAuthToken(authRef: string): string {
     if (authRef.startsWith('env:')) {
@@ -169,7 +167,7 @@ export class WechatAdapterClient {
       }
       return token;
     }
-    return authRef;
+    throw new Error('Adapter auth_ref must use env:VAR_NAME');
   }
 
   /**

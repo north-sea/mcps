@@ -126,7 +126,7 @@ export class WechatDraftService {
         configLoaded: true,
         probeIntervalMs: parseHealthProbeInterval(),
         sqliteCheck: () => jobStore.checkHealth(),
-        adapterProbe: async () => checkAdapters(config.adapters),
+        adapterProbe: async () => checkAdapter(config.wechat_adapter),
         hermesDbProbe: async () => {
           const result = await hermesDbClient.health();
           return {
@@ -155,13 +155,11 @@ export class WechatDraftService {
       const accounts = this.configLoader.getAllAccounts(input?.include_disabled ?? false);
       return createSuccessResult({
         accounts: accounts.map((account) => {
-          const adapter = this.configLoader.getAdapter(account.adapter_id);
           return {
             account_id: account.account_id,
             display_name: account.display_name,
             enabled: account.enabled,
-            adapter_id: account.adapter_id,
-            capabilities: adapter?.capabilities,
+            capabilities: this.config.wechat_adapter.capabilities,
           };
         }),
       });
@@ -334,18 +332,11 @@ export class WechatDraftService {
       );
     }
 
-    const adapterConfig = this.configLoader.getAdapter(accountConfig.adapter_id);
-    if (!adapterConfig) {
-      return createErrorResult(
-        ErrorCode.ADAPTER_NOT_FOUND,
-        `Adapter "${accountConfig.adapter_id}" not found`
-      );
-    }
-
+    const adapterConfig = this.config.wechat_adapter;
     if (requiredCapability && !adapterConfig.capabilities.includes(requiredCapability)) {
       return createErrorResult(
         ErrorCode.ADAPTER_CAPABILITY_MISSING,
-        `Adapter "${accountConfig.adapter_id}" does not support ${requiredCapability} capability`
+        `WeChat adapter does not support ${requiredCapability} capability`
       );
     }
 
@@ -374,14 +365,10 @@ function parseHealthProbeInterval(): number {
   return Number.isInteger(value) && value > 0 ? value : 30_000;
 }
 
-async function checkAdapters(adapters: EcsWechatAdapterConfig[]): Promise<{ ok: boolean; error?: string }> {
+async function checkAdapter(adapterConfig: EcsWechatAdapterConfig): Promise<{ ok: boolean; error?: string }> {
   try {
-    await Promise.all(
-      adapters.map(async (adapterConfig) => {
-        const client = new WechatAdapterClient(adapterConfig);
-        await client.checkHealth();
-      })
-    );
+    const client = new WechatAdapterClient(adapterConfig);
+    await client.checkHealth();
     return { ok: true };
   } catch (error) {
     return {

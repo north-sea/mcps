@@ -12,7 +12,6 @@ export interface AccountConfig {
   display_name: string;
   enabled: boolean;
   adapter_account_ref: string;
-  adapter_id: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -26,10 +25,8 @@ export interface ApiCredentialConfig {
 }
 
 export interface EcsWechatAdapterConfig {
-  adapter_id: string;
   base_url: string;
   auth_ref: string;
-  allowed_accounts: string[];
   egress_public_ip: string;
   network_path: 'tailscale' | 'wireguard' | 'ssh_tunnel' | 'private_vpc' | 'other';
   timeout_ms: number;
@@ -45,7 +42,7 @@ export interface HermesDbConfig {
 
 export interface ServiceConfig {
   accounts: AccountConfig[];
-  adapters: EcsWechatAdapterConfig[];
+  wechat_adapter: EcsWechatAdapterConfig;
   credentials: ApiCredentialConfig[];
   hermes_db: HermesDbConfig;
   runtime_path?: string;

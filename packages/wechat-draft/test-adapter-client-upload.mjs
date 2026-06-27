@@ -8,12 +8,13 @@ import { createServer } from 'node:http';
 
 // Mock adapter config
 const mockConfig = {
-  adapter_id: 'test-adapter',
   base_url: 'http://localhost:9999',
-  auth_ref: 'test-token',
+  auth_ref: 'env:WECHAT_ADAPTER_AUTH_TOKEN',
   timeout_ms: 5000,
   capabilities: ['draft_create', 'asset_upload'],
 };
+
+process.env.WECHAT_ADAPTER_AUTH_TOKEN = process.env.WECHAT_ADAPTER_AUTH_TOKEN || 'test-token';
 
 // Test utilities
 let testCount = 0;
@@ -70,7 +71,7 @@ async function testUploadAsset404MapsToEndpointNotFound() {
   const client = new WechatAdapterClient({
     ...mockConfig,
     base_url: `http://127.0.0.1:${port}`,
-    auth_ref: 'dummy-token',
+    auth_ref: 'env:WECHAT_ADAPTER_AUTH_TOKEN',
   });
 
   const testBytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]);

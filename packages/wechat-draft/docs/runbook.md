@@ -184,8 +184,7 @@ curl http://localhost:3000/health
 # 预期输出
 {
   "status": "ok",
-  "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"],
-  "allowed_accounts": ["weiyuchengchun", "yueliang", "xiaban"]
+  "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"]
 }
 ```
 
@@ -228,7 +227,6 @@ wechat_list_accounts
         "account_id": "xiaban",
         "display_name": "下班不躺平",
         "enabled": true,
-        "adapter_id": "ali-wechat-egress",
         "capabilities": ["check_credentials", "draft_add", "draft_batchget", "asset_upload"]
       }
     ]

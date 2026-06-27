@@ -110,10 +110,8 @@ function makeArtifact(): WorkflowArtifact {
 
 function makeAdapterConfig(): EcsWechatAdapterConfig {
   return {
-    adapter_id: 'test-adapter',
     base_url: 'http://127.0.0.1:3000',
     auth_ref: 'env:WECHAT_ADAPTER_AUTH_TOKEN',
-    allowed_accounts: ['xiaban'],
     egress_public_ip: '<REDACTED>',
     network_path: 'tailscale',
     timeout_ms: 1000,

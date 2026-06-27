@@ -29,24 +29,25 @@ const accountConfigSchema = z
     account_id: accountIdSchema,
     display_name: z.string().min(1),
     enabled: z.boolean().default(true),
-    adapter_account_ref: accountIdSchema,
-    adapter_id: z.string().min(1),
+    adapter_account_ref: accountIdSchema.optional(),
     metadata: metadataSchema,
   })
-  .strict();
+  .strict()
+  .transform((account) => ({
+    ...account,
+    adapter_account_ref: account.adapter_account_ref || account.account_id,
+  }));
 
 const adapterConfigSchema = z
   .object({
-    adapter_id: z.string().min(1),
     base_url: z.string().min(1),
     auth_ref: z
       .string()
       .min(1)
       .refine(
-        (value) => value.startsWith('env:') || value.startsWith('secret:'),
-        'must reference env:VAR or secret:NAME; raw auth tokens are not allowed'
+        (value) => value.startsWith('env:'),
+        'must reference env:VAR; raw auth tokens are not allowed'
       ),
-    allowed_accounts: z.array(accountIdSchema).min(1),
     egress_public_ip: z.string().default('<REDACTED>'),
     network_path: z
       .enum(['tailscale', 'wireguard', 'ssh_tunnel', 'private_vpc', 'other'])
@@ -83,7 +84,7 @@ const hermesDbConfigSchema = z
 const serviceConfigFileSchema = z
   .object({
     accounts: z.array(accountConfigSchema).min(1),
-    adapters: z.array(adapterConfigSchema).min(1),
+    wechat_adapter: adapterConfigSchema,
     credentials: z.array(credentialConfigSchema).default([]),
     hermes_db: hermesDbConfigSchema
       .optional()
@@ -147,11 +148,11 @@ export class ConfigLoader {
 
     const config: ServiceConfig = {
       accounts: parsed.data.accounts,
-      adapters: parsed.data.adapters.map((adapter) => ({
-        ...adapter,
-        base_url: process.env.WECHAT_ADAPTER_BASE_URL || adapter.base_url,
-        auth_ref: process.env.WECHAT_ADAPTER_AUTH_REF || adapter.auth_ref,
-      })),
+      wechat_adapter: {
+        ...parsed.data.wechat_adapter,
+        base_url: process.env.WECHAT_ADAPTER_BASE_URL || parsed.data.wechat_adapter.base_url,
+        auth_ref: process.env.WECHAT_ADAPTER_AUTH_REF || parsed.data.wechat_adapter.auth_ref,
+      },
       credentials: parsed.data.credentials,
       hermes_db: {
         ...parsed.data.hermes_db,
@@ -165,21 +166,17 @@ export class ConfigLoader {
   }
 
   private getDefaultConfig(): ServiceConfig {
-    const adapters: EcsWechatAdapterConfig[] = [
-      {
-        adapter_id: 'ali-wechat-egress',
-        base_url: process.env.WECHAT_ADAPTER_BASE_URL || 'http://localhost:3000',
-        auth_ref: process.env.WECHAT_ADAPTER_AUTH_REF || 'env:WECHAT_ADAPTER_AUTH_TOKEN',
-        allowed_accounts: ['weiyuchengchun', 'yueliang', 'xiaban'],
-        egress_public_ip: process.env.WECHAT_ECS_EGRESS_IP || '<REDACTED>',
-        network_path: (process.env.WECHAT_ADAPTER_NETWORK_PATH as any) || 'tailscale',
-        timeout_ms: 10000,
-        capabilities: ['check_credentials', 'draft_add', 'draft_batchget', 'asset_upload'],
-        metadata: {
-          deployment_note: 'Ali ECS, systemd service wechat-adapter',
-        },
+    const wechatAdapter: EcsWechatAdapterConfig = {
+      base_url: process.env.WECHAT_ADAPTER_BASE_URL || 'http://localhost:3000',
+      auth_ref: process.env.WECHAT_ADAPTER_AUTH_REF || 'env:WECHAT_ADAPTER_AUTH_TOKEN',
+      egress_public_ip: process.env.WECHAT_ECS_EGRESS_IP || '<REDACTED>',
+      network_path: (process.env.WECHAT_ADAPTER_NETWORK_PATH as any) || 'tailscale',
+      timeout_ms: 10000,
+      capabilities: ['check_credentials', 'draft_add', 'draft_batchget', 'asset_upload'],
+      metadata: {
+        deployment_note: 'Ali ECS, systemd service wechat-adapter',
       },
-    ];
+    };
 
     const accounts: AccountConfig[] = [
       {
@@ -187,7 +184,6 @@ export class ConfigLoader {
         display_name: '微雨成春',
         enabled: true,
         adapter_account_ref: 'weiyuchengchun',
-        adapter_id: 'ali-wechat-egress',
         metadata: {
           operator_note: 'MVP account for WeChat draft testing',
         },
@@ -197,7 +193,6 @@ export class ConfigLoader {
         display_name: '月亮睡了我不睡',
         enabled: true,
         adapter_account_ref: 'yueliang',
-        adapter_id: 'ali-wechat-egress',
         metadata: {
           operator_note: 'Moon Sleeping account for WeChat draft testing',
         },
@@ -207,7 +202,6 @@ export class ConfigLoader {
         display_name: '下班不躺平',
         enabled: true,
         adapter_account_ref: 'xiaban',
-        adapter_id: 'ali-wechat-egress',
         metadata: {
           operator_note: 'Xiaban account for multi-account production smoke',
           style_profile_id: 'xiaban.default',
@@ -244,7 +238,7 @@ export class ConfigLoader {
 
     return this.validateConfig({
       accounts,
-      adapters,
+      wechat_adapter: wechatAdapter,
       credentials,
       hermes_db: {
         base_url: process.env.HERMES_DB_BASE_URL || 'http://100.113.231.101:8765',
@@ -264,25 +258,10 @@ export class ConfigLoader {
       accountIds.add(account.account_id);
     }
 
-    const adapterIds = new Set<string>();
-    for (const adapter of config.adapters) {
-      if (adapterIds.has(adapter.adapter_id)) {
-        throw new Error(`Invalid WeChat Draft config ${source}: duplicate adapter_id "${adapter.adapter_id}"`);
-      }
-      adapterIds.add(adapter.adapter_id);
-    }
-
     for (const account of config.accounts) {
-      const adapter = config.adapters.find((item) => item.adapter_id === account.adapter_id);
-      if (!adapter) {
+      if (!account.adapter_account_ref) {
         throw new Error(
-          `Invalid WeChat Draft config ${source}: account "${account.account_id}" references missing adapter "${account.adapter_id}"`
-        );
-      }
-
-      if (account.enabled && !adapter.allowed_accounts.includes(account.adapter_account_ref)) {
-        throw new Error(
-          `Invalid WeChat Draft config ${source}: adapter "${adapter.adapter_id}" allowed_accounts must include "${account.adapter_account_ref}" for enabled account "${account.account_id}"`
+          `Invalid WeChat Draft config ${source}: account "${account.account_id}" must define adapter_account_ref`
         );
       }
     }
@@ -310,9 +289,8 @@ export class ConfigLoader {
     return config.accounts.find((a) => a.account_id === accountId);
   }
 
-  getAdapter(adapterId: string): EcsWechatAdapterConfig | undefined {
-    const config = this.load();
-    return config.adapters.find((a) => a.adapter_id === adapterId);
+  getWechatAdapter(): EcsWechatAdapterConfig {
+    return this.load().wechat_adapter;
   }
 
   getEnabledAccounts(): AccountConfig[] {

@@ -6,7 +6,6 @@ accounts:
     display_name: 微雨成春
     enabled: true
     adapter_account_ref: weiyuchengchun
-    adapter_id: ali-wechat-egress
     metadata:
       operator_note: MVP account for WeChat draft testing
       style_profile_id: weiyuchengchun.default
@@ -15,7 +14,6 @@ accounts:
     display_name: 月亮睡了我不睡
     enabled: true
     adapter_account_ref: yueliang
-    adapter_id: ali-wechat-egress
     metadata:
       operator_note: Moon Sleeping account for WeChat draft testing
       style_profile_id: yueliang.default
@@ -24,31 +22,25 @@ accounts:
     display_name: 下班不躺平
     enabled: true
     adapter_account_ref: xiaban
-    adapter_id: ali-wechat-egress
     metadata:
       operator_note: Xiaban account for multi-account production smoke
       style_profile_id: xiaban.default
       naming_rule: Stable short pinyin, lowercase ASCII, env-safe; do not rename after production use.
 
-adapters:
-  - adapter_id: ali-wechat-egress
-    base_url: http://100.x.x.x:3000
-    auth_ref: env:WECHAT_ADAPTER_AUTH_TOKEN
-    allowed_accounts:
-      - weiyuchengchun
-      - yueliang
-      - xiaban
-    egress_public_ip: <REDACTED_ECS_PUBLIC_IP>
-    network_path: tailscale
-    timeout_ms: 10000
-    capabilities:
-      - check_credentials
-      - draft_add
-      - draft_batchget
-      - asset_upload
-    metadata:
-      deployment_note: Ali ECS, systemd service wechat-adapter
-      host_alias: ali
+wechat_adapter:
+  base_url: http://100.x.x.x:3000
+  auth_ref: env:WECHAT_ADAPTER_AUTH_TOKEN
+  egress_public_ip: <REDACTED_ECS_PUBLIC_IP>
+  network_path: tailscale
+  timeout_ms: 10000
+  capabilities:
+    - check_credentials
+    - draft_add
+    - draft_batchget
+    - asset_upload
+  metadata:
+    deployment_note: Ali ECS, systemd service wechat-adapter
+    host_alias: ali
 
 credentials:
   - account_id: weiyuchengchun

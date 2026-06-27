@@ -140,13 +140,11 @@ function createConfigLoader(): ConfigLoader {
     display_name: '下班不躺平',
     enabled: true,
     adapter_account_ref: 'xiaban',
-    adapter_id: 'test-adapter',
   };
-  const adapter = createAdapterConfig();
 
   return {
     getAccount: (accountId: string) => (accountId === account.account_id ? account : undefined),
-    getAdapter: (adapterId: string) => (adapterId === adapter.adapter_id ? adapter : undefined),
+    getWechatAdapter: () => createAdapterConfig(),
     getAllAccounts: () => [account],
     getEnabledAccounts: () => [account],
     load: () => createServiceConfig(),
@@ -156,7 +154,7 @@ function createConfigLoader(): ConfigLoader {
 function createServiceConfig(): ServiceConfig {
   return {
     accounts: [],
-    adapters: [],
+    wechat_adapter: createAdapterConfig(),
     credentials: [],
     hermes_db: {
       base_url: 'http://127.0.0.1:8765',
@@ -167,10 +165,8 @@ function createServiceConfig(): ServiceConfig {
 
 function createAdapterConfig(): EcsWechatAdapterConfig {
   return {
-    adapter_id: 'test-adapter',
     base_url: 'http://127.0.0.1:3000',
     auth_ref: 'env:WECHAT_ADAPTER_AUTH_TOKEN',
-    allowed_accounts: ['xiaban'],
     egress_public_ip: '<REDACTED>',
     network_path: 'tailscale',
     timeout_ms: 1000,

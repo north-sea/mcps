@@ -27,8 +27,8 @@ test('ConfigLoader overlays runtime endpoint env vars on external YAML config', 
     const loader = new ConfigLoader();
     const config = loader.load();
 
-    assert.equal(config.adapters[0]?.base_url, 'http://adapter.runtime:3000');
-    assert.equal(config.adapters[0]?.auth_ref, 'env:RUNTIME_ADAPTER_TOKEN');
+    assert.equal(config.wechat_adapter.base_url, 'http://adapter.runtime:3000');
+    assert.equal(config.wechat_adapter.auth_ref, 'env:RUNTIME_ADAPTER_TOKEN');
     assert.equal(config.hermes_db.base_url, 'http://hermes.runtime:8080');
   } finally {
     restoreEnv(previous);
@@ -53,19 +53,15 @@ accounts:
     display_name: 下班不躺平
     enabled: true
     adapter_account_ref: xiaban
-    adapter_id: ali-wechat-egress
 
-adapters:
-  - adapter_id: ali-wechat-egress
-    base_url: http://adapter.file:3000
-    auth_ref: env:FILE_ADAPTER_TOKEN
-    allowed_accounts:
-      - xiaban
-    capabilities:
-      - check_credentials
-      - draft_add
-      - draft_batchget
-      - asset_upload
+wechat_adapter:
+  base_url: http://adapter.file:3000
+  auth_ref: env:FILE_ADAPTER_TOKEN
+  capabilities:
+    - check_credentials
+    - draft_add
+    - draft_batchget
+    - asset_upload
 
 credentials:
   - account_id: xiaban
