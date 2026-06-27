@@ -13,7 +13,7 @@ test('HealthMonitor returns ok when local checks and cached external checks are 
   const snapshot = await monitor.getSnapshot();
 
   assert.equal(snapshot.status, 'ok');
-  assert.equal(snapshot.version, '0.2.1');
+  assert.equal(snapshot.version, '0.2.3');
   assert.equal(snapshot.checks.config_loaded, true);
   assert.equal(snapshot.checks.runtime_writable, true);
   assert.equal(snapshot.checks.sqlite_ready, true);
