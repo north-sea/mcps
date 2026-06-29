@@ -11,6 +11,81 @@ def _json(value: object | None) -> str:
     return json.dumps(value if value is not None else {}, ensure_ascii=False)
 
 
+async def sync_track_config(
+    pool: asyncpg.Pool,
+    *,
+    accounts: list[dict],
+    tracks: list[dict],
+) -> dict:
+    account_sql = """
+        INSERT INTO hermes.topic_candidate_accounts (
+            account_id, display_name, enabled, draft_target, metadata
+        )
+        VALUES ($1, $2, $3, $4, $5::jsonb)
+        ON CONFLICT (account_id)
+        DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            enabled = EXCLUDED.enabled,
+            draft_target = EXCLUDED.draft_target,
+            metadata = EXCLUDED.metadata,
+            updated_at = now()
+    """
+    track_sql = """
+        INSERT INTO hermes.topic_candidate_tracks (
+            account_id, track_id, name, keywords, negative_keywords, sources,
+            scoring_profile, daily_quota, enabled
+        )
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)
+        ON CONFLICT (account_id, track_id)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            keywords = EXCLUDED.keywords,
+            negative_keywords = EXCLUDED.negative_keywords,
+            sources = EXCLUDED.sources,
+            scoring_profile = EXCLUDED.scoring_profile,
+            daily_quota = EXCLUDED.daily_quota,
+            enabled = EXCLUDED.enabled,
+            updated_at = now()
+    """
+    account_ids: list[str] = []
+    track_ids: list[str] = []
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for account in accounts:
+                await conn.execute(
+                    account_sql,
+                    account["account_id"],
+                    account["display_name"],
+                    account["enabled"],
+                    account.get("draft_target"),
+                    _json(account.get("metadata")),
+                )
+                account_ids.append(account["account_id"])
+
+            for track in tracks:
+                await conn.execute(
+                    track_sql,
+                    track["account_id"],
+                    track["track_id"],
+                    track["name"],
+                    _json(track["keywords"]),
+                    _json(track["negative_keywords"]),
+                    _json(track["sources"]),
+                    _json(track["scoring_profile"]),
+                    track.get("daily_quota"),
+                    track["enabled"],
+                )
+                track_ids.append(f"{track['account_id']}:{track['track_id']}")
+
+    return {
+        "accounts_upserted": len(account_ids),
+        "tracks_upserted": len(track_ids),
+        "account_ids": account_ids,
+        "track_ids": track_ids,
+    }
+
+
 async def upsert_candidate(
     pool: asyncpg.Pool,
     *,
@@ -225,7 +300,9 @@ async def list_tracks(
         track_conditions.append(f"enabled = ${idx}")
         params.append(enabled)
 
-    account_where = "WHERE " + " AND ".join(account_conditions) if account_conditions else ""
+    account_where = (
+        "WHERE " + " AND ".join(account_conditions) if account_conditions else ""
+    )
     track_where = "WHERE " + " AND ".join(track_conditions) if track_conditions else ""
     account_sql = f"""
         SELECT account_id, display_name, enabled, draft_target

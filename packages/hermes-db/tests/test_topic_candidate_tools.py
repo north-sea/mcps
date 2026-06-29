@@ -8,6 +8,7 @@ from hermes_db_mcp.tools.topic_candidates import (
     adopt_topic_candidate,
     list_topic_candidate_tracks,
     list_topic_candidates,
+    sync_topic_candidate_tracks,
     reject_topic_candidate,
     upsert_topic_candidate,
 )
@@ -95,7 +96,9 @@ async def test_upsert_topic_candidate_requires_account_track_and_source_identity
 
 
 @pytest.mark.asyncio
-async def test_list_topic_candidates_serializes_rows_without_raw_by_default(monkeypatch):
+async def test_list_topic_candidates_serializes_rows_without_raw_by_default(
+    monkeypatch,
+):
     candidate_id = uuid4()
 
     async def mock_list_candidates(pool, **kwargs):
@@ -128,7 +131,9 @@ async def test_list_topic_candidates_serializes_rows_without_raw_by_default(monk
         mock_list_candidates,
     )
 
-    result = await list_topic_candidates(FakeContext(FakeAppContext()), account_id="wechat-ai-tools")
+    result = await list_topic_candidates(
+        FakeContext(FakeAppContext()), account_id="wechat-ai-tools"
+    )
 
     assert result["total"] == 1
     assert "raw_payload" not in result["items"][0]
@@ -183,7 +188,9 @@ async def test_adopt_topic_candidate_returns_existing_topic_idempotently(monkeyp
         mock_get_candidate,
     )
 
-    result = await adopt_topic_candidate(str(candidate_id), FakeContext(FakeAppContext()))
+    result = await adopt_topic_candidate(
+        str(candidate_id), FakeContext(FakeAppContext())
+    )
 
     assert result == {
         "candidate_id": str(candidate_id),
@@ -231,3 +238,80 @@ async def test_list_topic_candidate_tracks(monkeypatch):
 
     assert result["accounts"][0]["account_id"] == "wechat-ai-tools"
     assert result["tracks"][0]["track_id"] == "ai-productivity"
+
+
+@pytest.mark.asyncio
+async def test_sync_topic_candidate_tracks_upserts_valid_config(monkeypatch):
+    async def mock_sync_track_config(pool, **kwargs):
+        assert kwargs["accounts"] == [
+            {
+                "account_id": "wechat-ai-tools",
+                "display_name": "AI Tools",
+                "enabled": True,
+                "draft_target": "wechat-ai-tools",
+                "metadata": {"aliases": ["AI工具"]},
+            }
+        ]
+        assert kwargs["tracks"][0]["track_id"] == "ai-productivity"
+        return {
+            "accounts_upserted": 1,
+            "tracks_upserted": 1,
+            "account_ids": ["wechat-ai-tools"],
+            "track_ids": ["wechat-ai-tools:ai-productivity"],
+        }
+
+    monkeypatch.setattr(
+        "hermes_db_mcp.tools.topic_candidates.topic_candidate_repo.sync_track_config",
+        mock_sync_track_config,
+    )
+
+    result = await sync_topic_candidate_tracks(
+        [
+            {
+                "account_id": "wechat-ai-tools",
+                "display_name": "AI Tools",
+                "draft_target": "wechat-ai-tools",
+                "metadata": {"aliases": ["AI工具"]},
+            }
+        ],
+        [
+            {
+                "account_id": "wechat-ai-tools",
+                "track_id": "ai-productivity",
+                "name": "AI Productivity",
+                "keywords": ["agent"],
+                "negative_keywords": [],
+                "sources": ["mock"],
+                "scoring_profile": {"freshness": 0.4},
+                "daily_quota": 5,
+            }
+        ],
+        FakeContext(FakeAppContext()),
+    )
+
+    assert result == {
+        "accounts_upserted": 1,
+        "tracks_upserted": 1,
+        "account_ids": ["wechat-ai-tools"],
+        "track_ids": ["wechat-ai-tools:ai-productivity"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_sync_topic_candidate_tracks_rejects_unknown_account_reference():
+    result = await sync_topic_candidate_tracks(
+        [],
+        [
+            {
+                "account_id": "missing",
+                "track_id": "ai-productivity",
+                "name": "AI Productivity",
+                "keywords": ["agent"],
+                "sources": ["mock"],
+            }
+        ],
+        FakeContext(FakeAppContext()),
+    )
+
+    assert result["error"] == "invalid_reference"
+    assert result["field"] == "tracks[0].account_id"

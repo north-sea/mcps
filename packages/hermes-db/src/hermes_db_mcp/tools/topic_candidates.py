@@ -112,11 +112,66 @@ async def list_topic_candidates(
         include_raw=include_raw,
     )
     return {
-        "items": [_serialize_candidate(item, include_raw=include_raw) for item in items],
+        "items": [
+            _serialize_candidate(item, include_raw=include_raw) for item in items
+        ],
         "total": total,
         "limit": limit,
         "offset": offset,
     }
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+async def sync_topic_candidate_tracks(
+    accounts: list[dict],
+    tracks: list[dict],
+    ctx: Context,
+) -> dict:
+    """幂等同步候选池账号和赛道配置。不会删除未出现在输入中的线上配置。"""
+    normalized_accounts = []
+    account_ids = set()
+    for index, account in enumerate(accounts):
+        normalized = _normalize_account_config(account, index)
+        if isinstance(normalized, dict) and "error" in normalized:
+            return normalized
+        normalized_accounts.append(normalized)
+        account_ids.add(normalized["account_id"])
+
+    normalized_tracks = []
+    seen_tracks = set()
+    for index, track in enumerate(tracks):
+        normalized = _normalize_track_config(track, index)
+        if isinstance(normalized, dict) and "error" in normalized:
+            return normalized
+        if normalized["account_id"] not in account_ids:
+            return error(
+                "invalid_reference",
+                field=f"tracks[{index}].account_id",
+                details={"account_id": normalized["account_id"]},
+            )
+        key = (normalized["account_id"], normalized["track_id"])
+        if key in seen_tracks:
+            return error(
+                "duplicate_track",
+                field=f"tracks[{index}].track_id",
+                details={"account_id": key[0], "track_id": key[1]},
+            )
+        seen_tracks.add(key)
+        normalized_tracks.append(normalized)
+
+    app: AppContext = ctx.request_context.lifespan_context
+    return await topic_candidate_repo.sync_track_config(
+        app.pool,
+        accounts=normalized_accounts,
+        tracks=normalized_tracks,
+    )
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -200,7 +255,10 @@ async def expire_topic_candidates(
         captured_before=before,
         limit=limit,
     )
-    return {"expired": len(ids), "candidate_ids": [str(candidate_id) for candidate_id in ids]}
+    return {
+        "expired": len(ids),
+        "candidate_ids": [str(candidate_id) for candidate_id in ids],
+    }
 
 
 @mcp.tool(
@@ -228,7 +286,9 @@ async def adopt_topic_candidate(
         return candidate_uuid
 
     app: AppContext = ctx.request_context.lifespan_context
-    current = await topic_candidate_repo.get_candidate(app.pool, candidate_id=candidate_uuid)
+    current = await topic_candidate_repo.get_candidate(
+        app.pool, candidate_id=candidate_uuid
+    )
     if not current:
         return error("not_found", details={"candidate_id": candidate_id})
 
@@ -277,7 +337,9 @@ async def _update_one_status(
         return candidate_uuid
 
     app: AppContext = ctx.request_context.lifespan_context
-    current = await topic_candidate_repo.get_candidate(app.pool, candidate_id=candidate_uuid)
+    current = await topic_candidate_repo.get_candidate(
+        app.pool, candidate_id=candidate_uuid
+    )
     if not current:
         return error("not_found", details={"candidate_id": candidate_id})
     if err := validate_transition("topic_candidate", current["status"], target_status):
@@ -304,6 +366,99 @@ def _parse_uuid(value: str, field: str) -> UUID | dict:
         return UUID(value)
     except (ValueError, AttributeError):
         return error("invalid_uuid", field=field, details={"value": value})
+
+
+def _normalize_account_config(value: dict, index: int) -> dict:
+    if not isinstance(value, dict):
+        return error("invalid_payload", field=f"accounts[{index}]")
+    account_id = _required_text(value, "account_id", f"accounts[{index}].account_id")
+    if isinstance(account_id, dict):
+        return account_id
+    display_name = _required_text(
+        value, "display_name", f"accounts[{index}].display_name"
+    )
+    if isinstance(display_name, dict):
+        return display_name
+    enabled = value.get("enabled", True)
+    if not isinstance(enabled, bool):
+        return error("invalid_field", field=f"accounts[{index}].enabled")
+    draft_target = value.get("draft_target")
+    if draft_target is not None and not isinstance(draft_target, str):
+        return error("invalid_field", field=f"accounts[{index}].draft_target")
+    metadata = value.get("metadata", {})
+    if not isinstance(metadata, dict):
+        return error("invalid_field", field=f"accounts[{index}].metadata")
+    return {
+        "account_id": account_id,
+        "display_name": display_name,
+        "enabled": enabled,
+        "draft_target": draft_target,
+        "metadata": metadata,
+    }
+
+
+def _normalize_track_config(value: dict, index: int) -> dict:
+    if not isinstance(value, dict):
+        return error("invalid_payload", field=f"tracks[{index}]")
+    account_id = _required_text(value, "account_id", f"tracks[{index}].account_id")
+    if isinstance(account_id, dict):
+        return account_id
+    track_id = _required_text(value, "track_id", f"tracks[{index}].track_id")
+    if isinstance(track_id, dict):
+        return track_id
+    name = _required_text(value, "name", f"tracks[{index}].name")
+    if isinstance(name, dict):
+        return name
+    keywords = _string_list(value.get("keywords"), f"tracks[{index}].keywords")
+    if isinstance(keywords, dict):
+        return keywords
+    negative_keywords = _string_list(
+        value.get("negative_keywords", []),
+        f"tracks[{index}].negative_keywords",
+        allow_empty=True,
+    )
+    if isinstance(negative_keywords, dict):
+        return negative_keywords
+    sources = _string_list(value.get("sources"), f"tracks[{index}].sources")
+    if isinstance(sources, dict):
+        return sources
+    scoring_profile = value.get("scoring_profile", {})
+    if not isinstance(scoring_profile, dict):
+        return error("invalid_field", field=f"tracks[{index}].scoring_profile")
+    daily_quota = value.get("daily_quota")
+    if daily_quota is not None and not isinstance(daily_quota, int):
+        return error("invalid_field", field=f"tracks[{index}].daily_quota")
+    enabled = value.get("enabled", True)
+    if not isinstance(enabled, bool):
+        return error("invalid_field", field=f"tracks[{index}].enabled")
+    return {
+        "account_id": account_id,
+        "track_id": track_id,
+        "name": name,
+        "keywords": keywords,
+        "negative_keywords": negative_keywords,
+        "sources": sources,
+        "scoring_profile": scoring_profile,
+        "daily_quota": daily_quota,
+        "enabled": enabled,
+    }
+
+
+def _required_text(value: dict, key: str, field: str) -> str | dict:
+    item = value.get(key)
+    if not isinstance(item, str) or not item.strip():
+        return error("missing_required_field", field=field)
+    return item.strip()
+
+
+def _string_list(
+    value: object, field: str, *, allow_empty: bool = False
+) -> list[str] | dict:
+    if not isinstance(value, list) or (not value and not allow_empty):
+        return error("invalid_field", field=field)
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        return error("invalid_field", field=field)
+    return [item.strip() for item in value]
 
 
 def _parse_datetime(value: str, field: str) -> datetime | dict:

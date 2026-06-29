@@ -6,11 +6,27 @@ import pytest
 from hermes_db_mcp.repositories import topic_candidate_repo
 
 
+class FakeTransaction:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 class FakeConnection:
     def __init__(self):
         self.fetchrow_calls = []
         self.fetch_calls = []
         self.fetchval_calls = []
+        self.execute_calls = []
+
+    def transaction(self):
+        return FakeTransaction()
+
+    async def execute(self, sql, *params):
+        self.execute_calls.append((sql, params))
+        return "INSERT 0 1"
 
     async def fetchrow(self, sql, *params):
         self.fetchrow_calls.append((sql, params))
@@ -123,3 +139,51 @@ async def test_expire_candidates_updates_only_active_candidates():
     assert "SET status = 'expired'" in sql
     assert params[0] == "wechat-ai-tools"
     assert params[2] == 50
+
+
+@pytest.mark.asyncio
+async def test_sync_track_config_upserts_accounts_before_tracks():
+    pool = FakePool()
+
+    result = await topic_candidate_repo.sync_track_config(
+        pool,
+        accounts=[
+            {
+                "account_id": "wechat-ai-tools",
+                "display_name": "AI Tools",
+                "enabled": True,
+                "draft_target": "wechat-ai-tools",
+                "metadata": {"aliases": ["AI工具"]},
+            }
+        ],
+        tracks=[
+            {
+                "account_id": "wechat-ai-tools",
+                "track_id": "ai-productivity",
+                "name": "AI Productivity",
+                "keywords": ["agent"],
+                "negative_keywords": [],
+                "sources": ["mock"],
+                "scoring_profile": {"freshness": 0.4},
+                "daily_quota": 5,
+                "enabled": True,
+            }
+        ],
+    )
+
+    account_sql, account_params = pool.conn.execute_calls[0]
+    track_sql, track_params = pool.conn.execute_calls[1]
+    assert "INSERT INTO hermes.topic_candidate_accounts" in account_sql
+    assert "ON CONFLICT (account_id)" in account_sql
+    assert account_params[0] == "wechat-ai-tools"
+    assert account_params[4] == '{"aliases": ["AI工具"]}'
+    assert "INSERT INTO hermes.topic_candidate_tracks" in track_sql
+    assert "ON CONFLICT (account_id, track_id)" in track_sql
+    assert track_params[0] == "wechat-ai-tools"
+    assert track_params[1] == "ai-productivity"
+    assert result == {
+        "accounts_upserted": 1,
+        "tracks_upserted": 1,
+        "account_ids": ["wechat-ai-tools"],
+        "track_ids": ["wechat-ai-tools:ai-productivity"],
+    }
