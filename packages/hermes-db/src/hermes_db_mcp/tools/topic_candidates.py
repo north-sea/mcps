@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from uuid import UUID
 
@@ -489,7 +490,7 @@ def _serialize_candidate(row: dict, *, include_raw: bool = False) -> dict:
         "updated_at": str(row["updated_at"]) if row.get("updated_at") else None,
     }
     if include_raw:
-        item["raw_payload"] = row.get("raw_payload") or {}
+        item["raw_payload"] = _json_object(row.get("raw_payload"))
     return item
 
 
@@ -507,13 +508,34 @@ def _serialize_track(row: dict) -> dict:
         "account_id": row["account_id"],
         "track_id": row["track_id"],
         "name": row["name"],
-        "keywords": row.get("keywords") or [],
-        "negative_keywords": row.get("negative_keywords") or [],
-        "sources": row.get("sources") or [],
-        "scoring_profile": row.get("scoring_profile") or {},
+        "keywords": _json_array(row.get("keywords")),
+        "negative_keywords": _json_array(row.get("negative_keywords")),
+        "sources": _json_array(row.get("sources")),
+        "scoring_profile": _json_object(row.get("scoring_profile")),
         "daily_quota": row.get("daily_quota"),
         "enabled": row["enabled"],
     }
+
+
+def _json_array(value: object) -> list:
+    decoded = _decode_json_value(value, [])
+    return decoded if isinstance(decoded, list) else []
+
+
+def _json_object(value: object) -> dict:
+    decoded = _decode_json_value(value, {})
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _decode_json_value(value: object, fallback: object) -> object:
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return fallback
+    return value
 
 
 def _maybe_float(value):
