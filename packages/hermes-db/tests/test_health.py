@@ -33,6 +33,7 @@ async def test_health_returns_version_and_capabilities():
         "topic_bucket": True,
         "topic_revisit_of": True,
         "list_revisit_chain": True,
+        "topic_candidates": True,
         "workflow_runs": True,
         "workflow_artifacts": True,
         "wechat_publication_ledger": True,
@@ -89,6 +90,7 @@ async def test_health_disables_capabilities_when_pg_is_unavailable(monkeypatch):
         "topic_bucket": False,
         "topic_revisit_of": False,
         "list_revisit_chain": False,
+        "topic_candidates": False,
         "workflow_runs": False,
         "workflow_artifacts": False,
         "wechat_publication_ledger": False,
@@ -122,6 +124,16 @@ def schema_inspector(monkeypatch):
     monkeypatch.setattr(
         "hermes_db_mcp.tools.health.inspect_workflow_schema",
         inspect_workflow_schema,
+    )
+
+    async def inspect_topic_candidate_schema(pool):
+        return {
+            "topic_candidates": True,
+        }
+
+    monkeypatch.setattr(
+        "hermes_db_mcp.tools.health.inspect_topic_candidate_schema",
+        inspect_topic_candidate_schema,
     )
 
     async def inspect_wechat_publication_ledger_schema(pool):
