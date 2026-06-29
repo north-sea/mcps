@@ -55,3 +55,27 @@ class TestInspirationTransitions:
         err = validate_transition("inspiration", "archived", "candidate")
         assert err is not None
         assert err["allowed"] == []
+
+
+class TestTopicCandidateTransitions:
+    def test_new_to_shortlisted(self):
+        assert validate_transition("topic_candidate", "new", "shortlisted") is None
+
+    def test_new_to_adopted(self):
+        assert validate_transition("topic_candidate", "new", "adopted") is None
+
+    def test_shortlisted_to_rejected(self):
+        assert validate_transition("topic_candidate", "shortlisted", "rejected") is None
+
+    def test_rejected_to_adopted_rejected(self):
+        err = validate_transition("topic_candidate", "rejected", "adopted")
+        assert err is not None
+        assert err["error"] == "invalid_transition"
+        assert err["from"] == "rejected"
+        assert err["to"] == "adopted"
+        assert err["allowed"] == []
+
+    def test_adopted_to_expired_rejected(self):
+        err = validate_transition("topic_candidate", "adopted", "expired")
+        assert err is not None
+        assert err["allowed"] == []

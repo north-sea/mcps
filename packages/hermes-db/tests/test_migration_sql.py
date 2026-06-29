@@ -198,3 +198,30 @@ def test_agent_self_evolution_foundation_migration_contains_required_schema_chan
     assert migration.index("DROP TABLE IF EXISTS hermes.policy_applications") < migration.index(
         "DROP TABLE IF EXISTS hermes.agent_policies"
     )
+
+
+def test_topic_candidate_contracts_migration_contains_required_schema_changes():
+    migration = Path(
+        "migrations/versions/0009_topic_candidate_contracts.py"
+    ).read_text()
+
+    assert 'revision: str = "0009_topic_candidates"' in migration
+    assert 'down_revision: Union[str, None] = "0008_novel_planning"' in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.topic_candidate_accounts" in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.topic_candidate_tracks" in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.topic_candidates" in migration
+    assert "REFERENCES hermes.topic_candidate_accounts(account_id)" in migration
+    assert "REFERENCES hermes.topic_candidate_tracks(account_id, track_id)" in migration
+    assert "REFERENCES hermes.topics(id)" in migration
+    assert "CONSTRAINT uq_topic_candidates_dedupe" in migration
+    assert "UNIQUE (account_id, track_id, dedupe_key)" in migration
+    assert "CONSTRAINT chk_topic_candidates_status" in migration
+    assert "CONSTRAINT chk_topic_candidates_source_identity" in migration
+    assert "idx_topic_candidate_accounts_enabled" in migration
+    assert "idx_topic_candidate_tracks_enabled" in migration
+    assert "idx_topic_candidates_pool" in migration
+    assert "idx_topic_candidates_source" in migration
+    assert "idx_topic_candidates_topic_id" in migration
+    assert "DROP TABLE IF EXISTS hermes.topic_candidates" in migration
+    assert "DROP TABLE IF EXISTS hermes.topic_candidate_tracks" in migration
+    assert "DROP TABLE IF EXISTS hermes.topic_candidate_accounts" in migration

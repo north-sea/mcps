@@ -12,9 +12,18 @@ INSPIRATION_TRANSITIONS: dict[str, list[str]] = {
     "archived": [],
 }
 
+TOPIC_CANDIDATE_TRANSITIONS: dict[str, list[str]] = {
+    "new": ["shortlisted", "adopted", "rejected", "expired"],
+    "shortlisted": ["adopted", "rejected", "expired"],
+    "adopted": [],
+    "rejected": [],
+    "expired": [],
+}
+
 _MACHINES = {
     "topic": TOPIC_TRANSITIONS,
     "inspiration": INSPIRATION_TRANSITIONS,
+    "topic_candidate": TOPIC_CANDIDATE_TRANSITIONS,
 }
 
 

@@ -64,6 +64,99 @@ async def inspect_topic_schema(pool: asyncpg.Pool) -> dict[str, bool]:
     }
 
 
+async def inspect_topic_candidate_schema(pool: asyncpg.Pool) -> dict[str, bool]:
+    account_columns = await _fetch_column_names(pool, "hermes", "topic_candidate_accounts")
+    track_columns = await _fetch_column_names(pool, "hermes", "topic_candidate_tracks")
+    candidate_columns = await _fetch_column_names(pool, "hermes", "topic_candidates")
+    candidate_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "topic_candidates_pkey",
+            "fk_topic_candidates_track",
+            "uq_topic_candidates_dedupe",
+            "chk_topic_candidates_status",
+            "chk_topic_candidates_source_identity",
+        ),
+        table_name="topic_candidates",
+    )
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_topic_candidate_accounts_enabled",
+            "idx_topic_candidate_tracks_enabled",
+            "idx_topic_candidates_pool",
+            "idx_topic_candidates_source",
+            "idx_topic_candidates_topic_id",
+        ),
+    )
+
+    account_required = {
+        "account_id",
+        "display_name",
+        "enabled",
+        "draft_target",
+        "metadata",
+        "created_at",
+        "updated_at",
+    }
+    track_required = {
+        "track_id",
+        "account_id",
+        "name",
+        "keywords",
+        "negative_keywords",
+        "sources",
+        "scoring_profile",
+        "daily_quota",
+        "enabled",
+        "created_at",
+        "updated_at",
+    }
+    candidate_required = {
+        "id",
+        "account_id",
+        "track_id",
+        "source",
+        "source_url",
+        "source_item_id",
+        "title",
+        "summary",
+        "hot_score",
+        "fit_score",
+        "novelty_score",
+        "status",
+        "dedupe_key",
+        "captured_at",
+        "raw_payload",
+        "topic_id",
+        "rejection_reason",
+        "adopted_at",
+        "status_updated_at",
+        "created_at",
+        "updated_at",
+    }
+
+    return {
+        "topic_candidates": account_required.issubset(account_columns)
+        and track_required.issubset(track_columns)
+        and candidate_required.issubset(candidate_columns)
+        and {
+            "fk_topic_candidates_track",
+            "uq_topic_candidates_dedupe",
+            "chk_topic_candidates_status",
+            "chk_topic_candidates_source_identity",
+        }.issubset(candidate_constraints)
+        and {
+            "idx_topic_candidate_accounts_enabled",
+            "idx_topic_candidate_tracks_enabled",
+            "idx_topic_candidates_pool",
+            "idx_topic_candidates_source",
+            "idx_topic_candidates_topic_id",
+        }.issubset(indexes)
+    }
+
+
 async def _fetch_index_names(
     pool: asyncpg.Pool,
     table_schema: str,
@@ -1017,4 +1110,3 @@ async def inspect_novel_agent_books_chapters_schema(
             "idx_novel_analysis_runs_book_started",
         }.issubset(indexes),
     }
-

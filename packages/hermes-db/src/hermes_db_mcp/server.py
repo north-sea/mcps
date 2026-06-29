@@ -51,6 +51,7 @@ mcp = FastMCP(
 def register_tools():
     from hermes_db_mcp.tools import health  # noqa: F401
     from hermes_db_mcp.tools import topics  # noqa: F401
+    from hermes_db_mcp.tools import topic_candidates  # noqa: F401
     from hermes_db_mcp.tools import inspirations  # noqa: F401
     from hermes_db_mcp.tools import workflow_runs  # noqa: F401
     from hermes_db_mcp.tools import workflow_artifacts  # noqa: F401
