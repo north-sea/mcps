@@ -225,3 +225,24 @@ def test_topic_candidate_contracts_migration_contains_required_schema_changes():
     assert "DROP TABLE IF EXISTS hermes.topic_candidates" in migration
     assert "DROP TABLE IF EXISTS hermes.topic_candidate_tracks" in migration
     assert "DROP TABLE IF EXISTS hermes.topic_candidate_accounts" in migration
+
+
+def test_topic_plan_contracts_migration_contains_required_schema_changes():
+    migration = Path("migrations/versions/0010_topic_plan_contracts.py").read_text()
+
+    assert 'revision: str = "0010_topic_plans"' in migration
+    assert 'down_revision: Union[str, None] = "0009_topic_candidates"' in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.topic_plans" in migration
+    assert "candidate_id UUID NOT NULL REFERENCES hermes.topic_candidates(id) ON DELETE CASCADE" in migration
+    assert "topic_id UUID REFERENCES hermes.topics(id) ON DELETE SET NULL" in migration
+    assert "CONSTRAINT uq_topic_plans_candidate UNIQUE (candidate_id)" in migration
+    assert "CONSTRAINT chk_topic_plans_status" in migration
+    assert "CHECK (status IN ('planned', 'rejected', 'consumed', 'archived'))" in migration
+    assert "CONSTRAINT chk_topic_plans_planned_shape" in migration
+    assert "jsonb_array_length(topic_angles) BETWEEN 3 AND 5" in migration
+    assert "CONSTRAINT chk_topic_plans_rejected_shape" in migration
+    assert "idx_topic_plans_account_status_created" in migration
+    assert "idx_topic_plans_account_track_status_created" in migration
+    assert "idx_topic_plans_candidate" in migration
+    assert "idx_topic_plans_topic_id" in migration
+    assert "DROP TABLE IF EXISTS hermes.topic_plans" in migration

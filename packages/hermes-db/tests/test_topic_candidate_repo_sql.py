@@ -40,6 +40,27 @@ class FakeConnection:
             }
         if "UPDATE hermes.topic_candidates" in sql:
             return {"id": params[1], "status": params[0], "topic_id": None}
+        if "FROM hermes.topic_candidates" in sql:
+            return {
+                "id": params[0],
+                "account_id": "wechat-ai-tools",
+                "track_id": "ai-productivity",
+                "source": "mock",
+                "source_url": "https://example.invalid/topic",
+                "source_item_id": "mock-1",
+                "title": "Mock topic",
+                "summary": "Summary",
+                "hot_score": 0.8,
+                "fit_score": 0.9,
+                "novelty_score": 0.7,
+                "status": "new",
+                "dedupe_key": "mock:1",
+                "captured_at": datetime.now(timezone.utc),
+                "topic_id": None,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "raw_payload": {"id": "mock-1"},
+            }
         return None
 
     async def fetch(self, sql, *params):
@@ -139,6 +160,25 @@ async def test_expire_candidates_updates_only_active_candidates():
     assert "SET status = 'expired'" in sql
     assert params[0] == "wechat-ai-tools"
     assert params[2] == 50
+
+
+@pytest.mark.asyncio
+async def test_get_candidate_hides_raw_payload_by_default_and_includes_on_request():
+    pool = FakePool()
+    candidate_id = uuid4()
+
+    await topic_candidate_repo.get_candidate(pool, candidate_id=candidate_id)
+    default_sql, _ = pool.conn.fetchrow_calls[0]
+    assert "raw_payload" not in default_sql
+
+    row = await topic_candidate_repo.get_candidate(
+        pool,
+        candidate_id=candidate_id,
+        include_raw=True,
+    )
+    raw_sql, _ = pool.conn.fetchrow_calls[1]
+    assert "raw_payload" in raw_sql
+    assert row["raw_payload"] == {"id": "mock-1"}
 
 
 @pytest.mark.asyncio

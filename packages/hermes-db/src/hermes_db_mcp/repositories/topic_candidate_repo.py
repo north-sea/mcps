@@ -197,14 +197,21 @@ async def list_candidates(
     return [dict(row) for row in rows], total
 
 
-async def get_candidate(pool_or_conn, *, candidate_id: UUID) -> dict | None:
+async def get_candidate(
+    pool_or_conn,
+    *,
+    candidate_id: UUID,
+    include_raw: bool = False,
+) -> dict | None:
+    raw_column = ", raw_payload" if include_raw else ""
     sql = """
         SELECT id, account_id, track_id, source, source_url, source_item_id,
                title, summary, hot_score, fit_score, novelty_score, status,
-               dedupe_key, captured_at, raw_payload, topic_id, created_at, updated_at
+               dedupe_key, captured_at, topic_id, created_at, updated_at
+               {raw_column}
         FROM hermes.topic_candidates
         WHERE id = $1
-    """
+    """.format(raw_column=raw_column)
     if hasattr(pool_or_conn, "fetchrow"):
         row = await pool_or_conn.fetchrow(sql, candidate_id)
         return dict(row) if row else None

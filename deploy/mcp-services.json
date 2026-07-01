@@ -35,7 +35,8 @@
             "wechat_analytics_ingestion",
             "wechat_retrospective_topic_optimizer",
             "agent_self_evolution_foundation",
-            "topic_candidates"
+            "topic_candidates",
+            "topic_plans"
           ]
         }
       }

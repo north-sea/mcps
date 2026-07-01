@@ -8,6 +8,7 @@ from hermes_db_mcp.services.schema import (
     inspect_agent_self_evolution_foundation_schema,
     inspect_novel_agent_books_chapters_schema,
     inspect_topic_candidate_schema,
+    inspect_topic_plan_schema,
     inspect_topic_schema,
     inspect_wechat_analytics_ingestion_schema,
     inspect_wechat_publication_ledger_schema,
@@ -65,6 +66,7 @@ async def health(ctx: Context) -> dict:
         "agent_self_evolution_foundation": False,
         "novel_agent_books_chapters": False,
         "topic_candidates": False,
+        "topic_plans": False,
     }
 
     if pg_ok:
@@ -79,6 +81,7 @@ async def health(ctx: Context) -> dict:
             result["capabilities"] = {
                 **await inspect_topic_schema(app.pool),
                 **await inspect_topic_candidate_schema(app.pool),
+                **await inspect_topic_plan_schema(app.pool),
                 **await inspect_workflow_schema(app.pool),
                 **await inspect_wechat_publication_ledger_schema(app.pool),
                 **await inspect_wechat_analytics_ingestion_schema(app.pool),

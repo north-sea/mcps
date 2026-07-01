@@ -122,6 +122,28 @@ async def list_topic_candidates(
     }
 
 
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+async def get_topic_candidate(
+    candidate_id: str,
+    ctx: Context,
+    include_raw: bool = False,
+) -> dict:
+    """读取单个候选。默认不返回 raw_payload，供规划链路按需打开。"""
+    candidate_uuid = _parse_uuid(candidate_id, "candidate_id")
+    if isinstance(candidate_uuid, dict):
+        return candidate_uuid
+
+    app: AppContext = ctx.request_context.lifespan_context
+    row = await topic_candidate_repo.get_candidate(
+        app.pool,
+        candidate_id=candidate_uuid,
+        include_raw=include_raw,
+    )
+    if not row:
+        return error("not_found", details={"candidate_id": candidate_id})
+    return _serialize_candidate(row, include_raw=include_raw)
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=False,

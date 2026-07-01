@@ -157,6 +157,69 @@ async def inspect_topic_candidate_schema(pool: asyncpg.Pool) -> dict[str, bool]:
     }
 
 
+async def inspect_topic_plan_schema(pool: asyncpg.Pool) -> dict[str, bool]:
+    columns = await _fetch_column_names(pool, "hermes", "topic_plans")
+    constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "topic_plans_pkey",
+            "uq_topic_plans_candidate",
+            "chk_topic_plans_status",
+            "chk_topic_plans_planned_shape",
+            "chk_topic_plans_rejected_shape",
+        ),
+        table_name="topic_plans",
+    )
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_topic_plans_account_status_created",
+            "idx_topic_plans_account_track_status_created",
+            "idx_topic_plans_candidate",
+            "idx_topic_plans_topic_id",
+        ),
+    )
+
+    required = {
+        "plan_id",
+        "candidate_id",
+        "account_id",
+        "track_id",
+        "status",
+        "recommended_angle_index",
+        "topic_angles",
+        "outline_pack",
+        "writing_brief",
+        "image_brief",
+        "evidence",
+        "llm_metadata",
+        "rejection_reason",
+        "topic_id",
+        "source",
+        "created_at",
+        "updated_at",
+        "consumed_at",
+    }
+
+    return {
+        "topic_plans": required.issubset(columns)
+        and {
+            "topic_plans_pkey",
+            "uq_topic_plans_candidate",
+            "chk_topic_plans_status",
+            "chk_topic_plans_planned_shape",
+            "chk_topic_plans_rejected_shape",
+        }.issubset(constraints)
+        and {
+            "idx_topic_plans_account_status_created",
+            "idx_topic_plans_account_track_status_created",
+            "idx_topic_plans_candidate",
+            "idx_topic_plans_topic_id",
+        }.issubset(indexes)
+    }
+
+
 async def _fetch_index_names(
     pool: asyncpg.Pool,
     table_schema: str,

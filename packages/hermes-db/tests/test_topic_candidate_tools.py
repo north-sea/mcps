@@ -6,6 +6,7 @@ import pytest
 
 from hermes_db_mcp.tools.topic_candidates import (
     adopt_topic_candidate,
+    get_topic_candidate,
     list_topic_candidate_tracks,
     list_topic_candidates,
     sync_topic_candidate_tracks,
@@ -138,6 +139,48 @@ async def test_list_topic_candidates_serializes_rows_without_raw_by_default(
     assert result["total"] == 1
     assert "raw_payload" not in result["items"][0]
     assert result["items"][0]["candidate_id"] == str(candidate_id)
+
+
+@pytest.mark.asyncio
+async def test_get_topic_candidate_include_raw(monkeypatch):
+    candidate_id = uuid4()
+
+    async def mock_get_candidate(pool, **kwargs):
+        assert kwargs["include_raw"] is True
+        return {
+            "id": candidate_id,
+            "account_id": "wechat-ai-tools",
+            "track_id": "ai-productivity",
+            "source": "mock",
+            "source_url": "https://example.invalid/topic",
+            "source_item_id": "mock-1",
+            "title": "Mock topic",
+            "summary": "Summary",
+            "hot_score": 0.8,
+            "fit_score": 0.9,
+            "novelty_score": 0.7,
+            "status": "new",
+            "dedupe_key": "mock:1",
+            "captured_at": datetime(2026, 6, 29, tzinfo=timezone.utc),
+            "topic_id": None,
+            "created_at": datetime(2026, 6, 29, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 6, 29, tzinfo=timezone.utc),
+            "raw_payload": {"id": "mock-1"},
+        }
+
+    monkeypatch.setattr(
+        "hermes_db_mcp.tools.topic_candidates.topic_candidate_repo.get_candidate",
+        mock_get_candidate,
+    )
+
+    result = await get_topic_candidate(
+        str(candidate_id),
+        FakeContext(FakeAppContext()),
+        include_raw=True,
+    )
+
+    assert result["candidate_id"] == str(candidate_id)
+    assert result["raw_payload"] == {"id": "mock-1"}
 
 
 @pytest.mark.asyncio
