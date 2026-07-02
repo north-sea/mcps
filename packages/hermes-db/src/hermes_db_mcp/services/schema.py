@@ -220,6 +220,68 @@ async def inspect_topic_plan_schema(pool: asyncpg.Pool) -> dict[str, bool]:
     }
 
 
+async def inspect_topic_plan_feedback_schema(pool: asyncpg.Pool) -> dict[str, bool]:
+    columns = await _fetch_column_names(pool, "hermes", "topic_plan_feedback_events")
+    constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "topic_plan_feedback_events_pkey",
+            "fk_topic_plan_feedback_events_plan",
+            "fk_topic_plan_feedback_events_topic",
+            "chk_topic_plan_feedback_event_type",
+            "chk_topic_plan_feedback_reason_tags_array",
+            "chk_topic_plan_feedback_metadata_object",
+        ),
+        table_name="topic_plan_feedback_events",
+    )
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_topic_plan_feedback_plan_event_at",
+            "idx_topic_plan_feedback_account_track_event_at",
+            "idx_topic_plan_feedback_account_event_type_event_at",
+            "uq_topic_plan_feedback_dedupe",
+            "idx_topic_plan_feedback_topic_id",
+        ),
+    )
+
+    required = {
+        "event_id",
+        "plan_id",
+        "account_id",
+        "track_id",
+        "event_type",
+        "dedupe_key",
+        "reason_tags",
+        "note",
+        "decided_by",
+        "topic_id",
+        "metadata",
+        "event_at",
+        "created_at",
+    }
+
+    return {
+        "topic_plan_feedback": required.issubset(columns)
+        and {
+            "topic_plan_feedback_events_pkey",
+            "fk_topic_plan_feedback_events_plan",
+            "fk_topic_plan_feedback_events_topic",
+            "chk_topic_plan_feedback_event_type",
+            "chk_topic_plan_feedback_reason_tags_array",
+            "chk_topic_plan_feedback_metadata_object",
+        }.issubset(constraints)
+        and {
+            "idx_topic_plan_feedback_plan_event_at",
+            "idx_topic_plan_feedback_account_track_event_at",
+            "idx_topic_plan_feedback_account_event_type_event_at",
+            "uq_topic_plan_feedback_dedupe",
+            "idx_topic_plan_feedback_topic_id",
+        }.issubset(indexes)
+    }
+
+
 async def _fetch_index_names(
     pool: asyncpg.Pool,
     table_schema: str,

@@ -246,3 +246,35 @@ def test_topic_plan_contracts_migration_contains_required_schema_changes():
     assert "idx_topic_plans_candidate" in migration
     assert "idx_topic_plans_topic_id" in migration
     assert "DROP TABLE IF EXISTS hermes.topic_plans" in migration
+
+
+def test_topic_plan_feedback_migration_contains_required_schema_changes():
+    migration = Path("migrations/versions/0011_topic_plan_feedback.py").read_text()
+
+    assert 'revision: str = "0011_topic_plan_feedback"' in migration
+    assert 'down_revision: Union[str, None] = "0010_topic_plans"' in migration
+    assert "CREATE TABLE IF NOT EXISTS hermes.topic_plan_feedback_events" in migration
+    assert "event_id UUID PRIMARY KEY DEFAULT gen_random_uuid()" in migration
+    assert "plan_id UUID NOT NULL" in migration
+    assert "CONSTRAINT fk_topic_plan_feedback_events_plan" in migration
+    assert "REFERENCES hermes.topic_plans(plan_id)" in migration
+    assert "ON DELETE CASCADE" in migration
+    assert "CONSTRAINT fk_topic_plan_feedback_events_topic" in migration
+    assert "REFERENCES hermes.topics(id)" in migration
+    assert "ON DELETE SET NULL" in migration
+    assert "CONSTRAINT chk_topic_plan_feedback_event_type" in migration
+    assert "'accepted'" in migration
+    assert "'published'" in migration
+    assert "'score_adjusted'" in migration
+    assert "CONSTRAINT chk_topic_plan_feedback_reason_tags_array" in migration
+    assert "CHECK (jsonb_typeof(reason_tags) = 'array')" in migration
+    assert "CONSTRAINT chk_topic_plan_feedback_metadata_object" in migration
+    assert "CHECK (jsonb_typeof(metadata) = 'object')" in migration
+    assert "idx_topic_plan_feedback_plan_event_at" in migration
+    assert "idx_topic_plan_feedback_account_track_event_at" in migration
+    assert "idx_topic_plan_feedback_account_event_type_event_at" in migration
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS uq_topic_plan_feedback_dedupe" in migration
+    assert "ON hermes.topic_plan_feedback_events(plan_id, event_type, dedupe_key)" in migration
+    assert "WHERE dedupe_key IS NOT NULL" in migration
+    assert "idx_topic_plan_feedback_topic_id" in migration
+    assert "DROP TABLE IF EXISTS hermes.topic_plan_feedback_events" in migration
