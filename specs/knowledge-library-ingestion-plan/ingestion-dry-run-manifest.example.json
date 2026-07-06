@@ -1,0 +1,31 @@
+{
+  "run_id": "knowledge-library-ingestion-plan-dry-run-2026-07-06",
+  "created_at": "2026-07-06T00:00:00.000Z",
+  "scope": "account-fit-source-plan",
+  "no_side_effects": true,
+  "sources": [
+    {
+      "source_id": "moon-sleeping-3-9m-feeding-rules",
+      "source_class": "reference-article",
+      "domain": "wechat",
+      "account_id": "moon-sleeping",
+      "track_id": "postpartum-survival",
+      "title": "3-9 month baby feeding source pack placeholder",
+      "origin_path": "/Users/yqg/learning/biji/note",
+      "owner": "library",
+      "retention": "do-not-delete",
+      "deletion_gate_refs": [
+        "knowledge-library-ingestion-plan/deletion-gates.md"
+      ],
+      "status": "dry-run",
+      "notes": "Metadata-only placeholder. No live Library import was performed."
+    }
+  ],
+  "blocked": [
+    {
+      "source_id": "moon-sleeping-3-9m-feeding-rules",
+      "reason": "real source document has not been selected or imported",
+      "next_action": "pick source material and run a future importer dry-run"
+    }
+  ]
+}

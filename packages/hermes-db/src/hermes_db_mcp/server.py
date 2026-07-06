@@ -67,6 +67,7 @@ def register_tools():
     from hermes_db_mcp.tools import novel_style_profiles  # noqa: F401
     from hermes_db_mcp.tools import novel_reports  # noqa: F401
     from hermes_db_mcp.tools import novel_planning  # noqa: F401
+    from hermes_db_mcp.tools import novel_retrospective  # noqa: F401
 
 
 def main():

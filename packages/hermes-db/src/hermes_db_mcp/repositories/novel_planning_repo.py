@@ -4,7 +4,6 @@
 对应 migration 0008 的批量规划数据写入、章纲输入包查询、上下文版本追踪。
 """
 
-import json
 import asyncpg
 
 
@@ -337,5 +336,4 @@ async def get_current_context_version(
         if version is None:
             raise ValueError(f"book_not_found: {book_slug}")
         return version
-
 

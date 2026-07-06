@@ -43,6 +43,7 @@ async def test_health_returns_version_and_capabilities():
         "wechat_retrospective_topic_optimizer": True,
         "agent_self_evolution_foundation": True,
         "novel_agent_books_chapters": False,
+        "novel_retrospective_contracts": True,
     }
     assert result["schema_revision"] == "0001_topic_revisit"
 
@@ -102,6 +103,7 @@ async def test_health_disables_capabilities_when_pg_is_unavailable(monkeypatch):
         "wechat_retrospective_topic_optimizer": False,
         "agent_self_evolution_foundation": False,
         "novel_agent_books_chapters": False,
+        "novel_retrospective_contracts": False,
     }
 
 
@@ -198,4 +200,14 @@ def schema_inspector(monkeypatch):
     monkeypatch.setattr(
         "hermes_db_mcp.tools.health.inspect_agent_self_evolution_foundation_schema",
         inspect_agent_self_evolution_foundation_schema,
+    )
+
+    async def inspect_novel_retrospective_contracts_schema(pool):
+        return {
+            "novel_retrospective_contracts": True,
+        }
+
+    monkeypatch.setattr(
+        "hermes_db_mcp.tools.health.inspect_novel_retrospective_contracts_schema",
+        inspect_novel_retrospective_contracts_schema,
     )

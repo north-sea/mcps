@@ -181,7 +181,7 @@ async def get_topic_plan_feedback_report(
     window_days: int = 30,
     min_sample_size: int = 5,
 ) -> dict:
-    conditions = [f"p.created_at >= now() - make_interval(days => $1::int)"]
+    conditions = ["p.created_at >= now() - make_interval(days => $1::int)"]
     params: list = [window_days]
     idx = 2
     if account_id:

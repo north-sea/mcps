@@ -7,6 +7,7 @@ from hermes_db_mcp.services.embedding import build_embedding_payload
 from hermes_db_mcp.services.schema import (
     inspect_agent_self_evolution_foundation_schema,
     inspect_novel_agent_books_chapters_schema,
+    inspect_novel_retrospective_contracts_schema,
     inspect_topic_candidate_schema,
     inspect_topic_plan_feedback_schema,
     inspect_topic_plan_schema,
@@ -66,6 +67,7 @@ async def health(ctx: Context) -> dict:
         "wechat_retrospective_topic_optimizer": False,
         "agent_self_evolution_foundation": False,
         "novel_agent_books_chapters": False,
+        "novel_retrospective_contracts": False,
         "topic_candidates": False,
         "topic_plans": False,
         "topic_plan_feedback": False,
@@ -91,6 +93,7 @@ async def health(ctx: Context) -> dict:
                 **await inspect_wechat_retrospective_topic_optimizer_schema(app.pool),
                 **await inspect_agent_self_evolution_foundation_schema(app.pool),
                 **await inspect_novel_agent_books_chapters_schema(app.pool),
+                **await inspect_novel_retrospective_contracts_schema(app.pool),
             }
         except Exception as e:
             result["schema_error"] = str(e)

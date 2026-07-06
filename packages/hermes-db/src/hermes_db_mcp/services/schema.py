@@ -1235,3 +1235,230 @@ async def inspect_novel_agent_books_chapters_schema(
             "idx_novel_analysis_runs_book_started",
         }.issubset(indexes),
     }
+
+
+async def inspect_novel_retrospective_contracts_schema(
+    pool: asyncpg.Pool,
+) -> dict[str, bool]:
+    """Check novel retrospective durable contract schema."""
+    reports_columns = await _fetch_column_names(pool, "hermes", "novel_retrospective_reports")
+    alerts_columns = await _fetch_column_names(pool, "hermes", "novel_retrospective_alerts")
+    constraints_columns = await _fetch_column_names(pool, "hermes", "novel_correction_constraints")
+    handoff_columns = await _fetch_column_names(pool, "hermes", "novel_handoff_packages")
+    states_columns = await _fetch_column_names(pool, "hermes", "novel_character_states")
+    candidates_columns = await _fetch_column_names(pool, "hermes", "novel_learning_candidates")
+
+    report_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_retrospective_reports_pkey",
+            "novel_retrospective_reports_book_slug_fkey",
+            "chk_novel_retrospective_reports_mode",
+            "chk_novel_retrospective_reports_chapter_range",
+            "chk_novel_retrospective_reports_confidence",
+            "chk_novel_retrospective_reports_review_status",
+        ),
+        table_name="novel_retrospective_reports",
+    )
+    alert_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_retrospective_alerts_pkey",
+            "novel_retrospective_alerts_report_id_fkey",
+            "chk_novel_retrospective_alerts_type",
+            "chk_novel_retrospective_alerts_severity",
+        ),
+        table_name="novel_retrospective_alerts",
+    )
+    constraint_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_correction_constraints_pkey",
+            "novel_correction_constraints_book_slug_fkey",
+            "novel_correction_constraints_source_report_id_fkey",
+            "chk_novel_correction_constraints_target",
+            "chk_novel_correction_constraints_status",
+        ),
+        table_name="novel_correction_constraints",
+    )
+    handoff_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_handoff_packages_pkey",
+            "novel_handoff_packages_book_slug_fkey",
+            "chk_novel_handoff_packages_snapshot",
+            "chk_novel_handoff_packages_context_version",
+        ),
+        table_name="novel_handoff_packages",
+    )
+    state_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_character_states_pkey",
+            "novel_character_states_book_slug_fkey",
+            "chk_novel_character_states_last_chapter",
+            "uq_novel_character_states_book_character_chapter",
+        ),
+        table_name="novel_character_states",
+    )
+    candidate_constraints = await _fetch_constraint_names(
+        pool,
+        (
+            "novel_learning_candidates_pkey",
+            "novel_learning_candidates_source_report_id_fkey",
+            "chk_novel_learning_candidates_confidence",
+            "chk_novel_learning_candidates_status",
+        ),
+        table_name="novel_learning_candidates",
+    )
+
+    indexes = await _fetch_index_names(
+        pool,
+        "hermes",
+        (
+            "idx_novel_retrospective_reports_book_created",
+            "idx_novel_retrospective_reports_book_range",
+            "idx_novel_retrospective_reports_review_status",
+            "idx_novel_retrospective_alerts_report",
+            "idx_novel_correction_constraints_book_status",
+            "idx_novel_correction_constraints_report",
+            "idx_novel_handoff_packages_book_created",
+            "idx_novel_character_states_book_character",
+            "idx_novel_character_states_book_chapter",
+            "idx_novel_learning_candidates_source_report",
+        ),
+    )
+
+    reports_required = {
+        "report_id",
+        "book_slug",
+        "batch_label",
+        "mode",
+        "start_chapter",
+        "end_chapter",
+        "scoring_version",
+        "diagnosis_json",
+        "llm_narrative",
+        "confidence",
+        "warnings",
+        "review_status",
+        "created_at",
+        "updated_at",
+    }
+    alerts_required = {
+        "alert_id",
+        "report_id",
+        "alert_type",
+        "severity",
+        "description",
+        "evidence_refs",
+        "suggested_action",
+        "created_at",
+    }
+    constraints_required = {
+        "constraint_id",
+        "book_slug",
+        "source_report_id",
+        "alert_type",
+        "description",
+        "target_chapters",
+        "status",
+        "expires_at",
+        "created_at",
+        "updated_at",
+    }
+    handoff_required = {
+        "package_id",
+        "book_slug",
+        "snapshot_chapter",
+        "context_version",
+        "progress_json",
+        "character_states_json",
+        "recent_changes",
+        "remaining_tasks",
+        "disabled_templates",
+        "stage_reminders",
+        "created_at",
+    }
+    states_required = {
+        "state_id",
+        "book_slug",
+        "character_name",
+        "last_chapter",
+        "location",
+        "relationships_json",
+        "emotional_state",
+        "goals",
+        "conflicts",
+        "arc_progress",
+        "dialogue_style",
+        "personality_traits",
+        "created_at",
+        "updated_at",
+    }
+    candidates_required = {
+        "candidate_id",
+        "source_report_id",
+        "scope",
+        "trigger_conditions",
+        "proposed_action",
+        "evidence_refs",
+        "confidence",
+        "status",
+        "created_at",
+        "updated_at",
+    }
+
+    return {
+        "novel_retrospective_contracts": reports_required.issubset(reports_columns)
+        and alerts_required.issubset(alerts_columns)
+        and constraints_required.issubset(constraints_columns)
+        and handoff_required.issubset(handoff_columns)
+        and states_required.issubset(states_columns)
+        and candidates_required.issubset(candidates_columns)
+        and {
+            "novel_retrospective_reports_book_slug_fkey",
+            "chk_novel_retrospective_reports_mode",
+            "chk_novel_retrospective_reports_chapter_range",
+            "chk_novel_retrospective_reports_confidence",
+            "chk_novel_retrospective_reports_review_status",
+        }.issubset(report_constraints)
+        and {
+            "novel_retrospective_alerts_report_id_fkey",
+            "chk_novel_retrospective_alerts_type",
+            "chk_novel_retrospective_alerts_severity",
+        }.issubset(alert_constraints)
+        and {
+            "novel_correction_constraints_book_slug_fkey",
+            "novel_correction_constraints_source_report_id_fkey",
+            "chk_novel_correction_constraints_target",
+            "chk_novel_correction_constraints_status",
+        }.issubset(constraint_constraints)
+        and {
+            "novel_handoff_packages_book_slug_fkey",
+            "chk_novel_handoff_packages_snapshot",
+            "chk_novel_handoff_packages_context_version",
+        }.issubset(handoff_constraints)
+        and {
+            "novel_character_states_book_slug_fkey",
+            "chk_novel_character_states_last_chapter",
+            "uq_novel_character_states_book_character_chapter",
+        }.issubset(state_constraints)
+        and {
+            "novel_learning_candidates_source_report_id_fkey",
+            "chk_novel_learning_candidates_confidence",
+            "chk_novel_learning_candidates_status",
+        }.issubset(candidate_constraints)
+        and {
+            "idx_novel_retrospective_reports_book_created",
+            "idx_novel_retrospective_reports_book_range",
+            "idx_novel_retrospective_reports_review_status",
+            "idx_novel_retrospective_alerts_report",
+            "idx_novel_correction_constraints_book_status",
+            "idx_novel_correction_constraints_report",
+            "idx_novel_handoff_packages_book_created",
+            "idx_novel_character_states_book_character",
+            "idx_novel_character_states_book_chapter",
+            "idx_novel_learning_candidates_source_report",
+        }.issubset(indexes),
+    }
